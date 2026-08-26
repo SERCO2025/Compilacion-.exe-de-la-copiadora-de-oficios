@@ -11,565 +11,80 @@ permissions:
 
 jobs:
   build-windows-x86:
-
     name: Compilar EXE Windows 32 bits
-
     runs-on: windows-2022
 
     steps:
+    - name: Descargar código del proyecto
+      uses: actions/checkout@v4
 
-      # ============================================================
-      # 1. Descargar el código del repositorio
-      # ============================================================
-      - name: Descargar código del proyecto
-        uses: actions/checkout@v4
+    - name: Descargar Python 3.7.9 x86
+      shell: powershell
+      run: |
+        $pythonUrl = "https://www.python.org/ftp/python/3.7.9/python-3.7.9.exe"
+        $pythonInstaller = "$env:RUNNER_TEMP\python-3.7.9-x86.exe"
+        Invoke-WebRequest -Uri $pythonUrl -OutFile $pythonInstaller
 
+    - name: Instalar Python 3.7.9 x86
+      shell: powershell
+      run: |
+        $pythonInstaller = "$env:RUNNER_TEMP\python-3.7.9-x86.exe"
+        Start-Process -FilePath $pythonInstaller -ArgumentList "/quiet InstallAllUsers=0 PrependPath=0 Include_pip=1 Include_test=0" -Wait -NoNewWindow
 
-      # ============================================================
-      # 2. Descargar Python 3.7.9 x86
-      # ============================================================
-      - name: Descargar Python 3.7.9 x86
-        shell: powershell
-        run: |
-          $pythonUrl = "https://www.python.org/ftp/python/3.7.9/python-3.7.9.exe"
-          $pythonInstaller = "$env:RUNNER_TEMP\python-3.7.9-x86.exe"
-
-          Write-Host "=============================================="
-          Write-Host "DESCARGANDO PYTHON 3.7.9 X86"
-          Write-Host "=============================================="
-
-          Invoke-WebRequest `
-            -Uri $pythonUrl `
-            -OutFile $pythonInstaller
-
-          if (!(Test-Path $pythonInstaller)) {
-            Write-Error "No se pudo descargar Python 3.7.9."
-            exit 1
-          }
-
-          Write-Host ""
-          Write-Host "Instalador descargado:"
-          Write-Host $pythonInstaller
-
-
-      # ============================================================
-      # 3. Instalar Python 3.7.9 x86
-      # ============================================================
-      - name: Instalar Python 3.7.9 x86
-        shell: powershell
-        run: |
-          $pythonInstaller = "$env:RUNNER_TEMP\python-3.7.9-x86.exe"
-
-          Write-Host "=============================================="
-          Write-Host "INSTALANDO PYTHON 3.7.9 X86"
-          Write-Host "=============================================="
-
-          Start-Process `
-            -FilePath $pythonInstaller `
-            -ArgumentList "/quiet InstallAllUsers=0 PrependPath=0 Include_pip=1 Include_test=0" `
-            -Wait `
-            -NoNewWindow
-
-          Write-Host ""
-          Write-Host "Instalación finalizada."
-
-
-      # ============================================================
-      # 4. Localizar y verificar Python 3.7.9 x86
-      # ============================================================
-      - name: Localizar Python 3.7.9 x86
-        shell: powershell
-        run: |
-
-          Write-Host "=============================================="
-          Write-Host "BUSCANDO PYTHON 3.7.9 X86"
-          Write-Host "=============================================="
-
-          $candidates = @(
-            "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe",
-            "$env:ProgramFiles(x86)\Python37-32\python.exe",
-            "$env:ProgramFiles(x86)\Python37\python.exe"
-          )
-
-          $pythonExe = $null
-
-          foreach ($candidate in $candidates) {
-
-            Write-Host ""
-            Write-Host "Comprobando:"
-            Write-Host $candidate
-
-            if (Test-Path $candidate) {
-
-              Write-Host "Archivo encontrado."
-
-              try {
-
-                $version = & $candidate --version 2>&1
-
-                Write-Host "Versión detectada:"
-                Write-Host $version
-
-                if ($version -match "Python 3\.7\.9") {
-                  $pythonExe = $candidate
-                  break
-                }
-
-              }
-              catch {
-                Write-Host "No se pudo ejecutar este Python."
-              }
+    - name: Localizar Python 3.7.9 x86
+      shell: powershell
+      run: |
+        $candidates = @(
+          "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe",
+          "$env:ProgramFiles(x86)\Python37-32\python.exe",
+          "$env:ProgramFiles(x86)\Python37\python.exe"
+        )
+        $pythonExe = $null
+        foreach ($candidate in $candidates) {
+          if (Test-Path $candidate) {
+            $version = & $candidate --version 2>&1
+            if ($version -match "Python 3\.7\.9") {
+              $pythonExe = $candidate
+              break
             }
           }
-
-          if ($null -eq $pythonExe) {
-            Write-Error "NO SE ENCONTRÓ PYTHON 3.7.9 X86."
-            exit 1
-          }
-
-          Write-Host ""
-          Write-Host "=============================================="
-          Write-Host "PYTHON 3.7.9 ENCONTRADO"
-          Write-Host "=============================================="
-          Write-Host $pythonExe
-
-          & $pythonExe --version
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "No se pudo ejecutar Python 3.7.9."
-            exit 1
-          }
-
-          & $pythonExe -c "import sys, struct; print('Python:', sys.version); print('Arquitectura:', struct.calcsize('P') * 8, 'bits'); assert sys.version_info[:3] == (3,7,9); assert struct.calcsize('P') * 8 == 32"
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Python encontrado no es Python 3.7.9 de 32 bits."
-            exit 1
-          }
-
-          Write-Host ""
-          Write-Host "Python 3.7.9 x86 confirmado correctamente."
-
-
-      # ============================================================
-      # 5. Instalar/actualizar pip usando el Python localizado
-      # ============================================================
-      - name: Preparar pip
-        shell: powershell
-        run: |
-
-          Write-Host "=============================================="
-          Write-Host "PREPARANDO PIP"
-          Write-Host "=============================================="
-
-          $pythonExe = "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe"
-
-          if (!(Test-Path $pythonExe)) {
-            $pythonExe = "$env:ProgramFiles(x86)\Python37-32\python.exe"
-          }
-
-          if (!(Test-Path $pythonExe)) {
-            $pythonExe = "$env:ProgramFiles(x86)\Python37\python.exe"
-          }
-
-          if (!(Test-Path $pythonExe)) {
-            Write-Error "No se encontró Python 3.7.9 x86 para preparar pip."
-            exit 1
-          }
-
-          & $pythonExe -m ensurepip --upgrade
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "ensurepip no pudo preparar pip."
-            exit 1
-          }
-
-          & $pythonExe -m pip install --upgrade `
-            "pip<24.1" `
-            "setuptools<68" `
-            "wheel<0.42"
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "No se pudo preparar pip correctamente."
-            exit 1
-          }
-
-          Write-Host ""
-          Write-Host "pip preparado correctamente."
-
-
-      # ============================================================
-      # 6. Instalar dependencias exactas
-      # ============================================================
-      - name: Instalar dependencias
-        shell: powershell
-        run: |
-
-          Write-Host "=============================================="
-          Write-Host "INSTALANDO DEPENDENCIAS"
-          Write-Host "=============================================="
-
-          $pythonExe = "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe"
-
-          if (!(Test-Path $pythonExe)) {
-            $pythonExe = "$env:ProgramFiles(x86)\Python37-32\python.exe"
-          }
-
-          if (!(Test-Path $pythonExe)) {
-            $pythonExe = "$env:ProgramFiles(x86)\Python37\python.exe"
-          }
-
-          if (!(Test-Path $pythonExe)) {
-            Write-Error "No se encontró Python 3.7.9 x86."
-            exit 1
-          }
-
-          Write-Host ""
-          Write-Host "Python utilizado:"
-          Write-Host $pythonExe
-
-          Write-Host ""
-          Write-Host "Instalando NumPy 1.21.6..."
-
-          & $pythonExe -m pip install "numpy==1.21.6"
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Falló la instalación de NumPy 1.21.6."
-            exit 1
-          }
-
-          Write-Host ""
-          Write-Host "Instalando OpenCV-Python 4.5.5.64..."
-
-          & $pythonExe -m pip install "opencv-python==4.5.5.64"
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Falló la instalación de OpenCV-Python 4.5.5.64."
-            exit 1
-          }
-
-          Write-Host ""
-          Write-Host "Instalando Pillow 9.5.0..."
-
-          & $pythonExe -m pip install "Pillow==9.5.0"
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Falló la instalación de Pillow 9.5.0."
-            exit 1
-          }
-
-          Write-Host ""
-          Write-Host "Instalando pywin32 306..."
-
-          & $pythonExe -m pip install "pywin32==306"
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Falló la instalación de pywin32 306."
-            exit 1
-          }
-
-          Write-Host ""
-          Write-Host "Instalando PyInstaller 5.13.2..."
-
-          & $pythonExe -m pip install "pyinstaller==5.13.2"
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Falló la instalación de PyInstaller 5.13.2."
-            exit 1
-          }
-
-          Write-Host ""
-          Write-Host "Todas las dependencias fueron instaladas."
-
-
-      # ============================================================
-      # 7. Verificar dependencias
-      # ============================================================
-      - name: Verificar dependencias
-        shell: powershell
-        run: |
-
-          Write-Host "=============================================="
-          Write-Host "VERIFICANDO DEPENDENCIAS"
-          Write-Host "=============================================="
-
-          $pythonExe = "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe"
-
-          if (!(Test-Path $pythonExe)) {
-            $pythonExe = "$env:ProgramFiles(x86)\Python37-32\python.exe"
-          }
-
-          if (!(Test-Path $pythonExe)) {
-            $pythonExe = "$env:ProgramFiles(x86)\Python37\python.exe"
-          }
-
-          if (!(Test-Path $pythonExe)) {
-            Write-Error "No se encontró Python 3.7.9 x86."
-            exit 1
-          }
-
-          & $pythonExe -c "import sys, struct; print('Python:', sys.version); print('Arquitectura:', struct.calcsize('P') * 8, 'bits'); assert sys.version_info[:3] == (3,7,9); assert struct.calcsize('P') * 8 == 32"
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Python no cumple los requisitos."
-            exit 1
-          }
-
-          & $pythonExe -c "import numpy; print('NumPy:', numpy.__version__)"
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "No se pudo importar NumPy."
-            exit 1
-          }
-
-          & $pythonExe -c "import cv2; print('OpenCV:', cv2.__version__)"
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "No se pudo importar OpenCV."
-            exit 1
-          }
-
-          & $pythonExe -c "import PIL; print('Pillow:', PIL.__version__)"
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "No se pudo importar Pillow."
-            exit 1
-          }
-
-          & $pythonExe -c "import win32api; print('pywin32: OK')"
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "No se pudo importar pywin32."
-            exit 1
-          }
-
-          & $pythonExe -m PyInstaller --version
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "No se pudo ejecutar PyInstaller."
-            exit 1
-          }
-
-          Write-Host ""
-          Write-Host "Todas las dependencias fueron verificadas."
-
-
-      # ============================================================
-      # 8. Comprobar estructura del proyecto
-      # ============================================================
-      - name: Comprobar archivos del proyecto
-        shell: powershell
-        run: |
-
-          Write-Host "=============================================="
-          Write-Host "VERIFICANDO ESTRUCTURA DEL PROYECTO"
-          Write-Host "=============================================="
-
-          $requiredFiles = @(
-            "main.py",
-            "config.json",
-            "copiadora.ico",
-            "core\scanner.py",
-            "core\printer.py",
-            "core\image_processor.py",
-            "core\config_manager.py",
-            "core\network.py",
-            "ui\config_window.py"
-          )
-
-          foreach ($file in $requiredFiles) {
-
-            if (!(Test-Path $file)) {
-              Write-Error "Falta el archivo requerido: $file"
-              exit 1
-            }
-
-            Write-Host "OK: $file"
-          }
-
-          Write-Host ""
-          Write-Host "Todos los archivos requeridos están presentes."
-
-
-      # ============================================================
-      # 9. Comprobar sintaxis
-      # ============================================================
-      - name: Comprobar sintaxis del proyecto
-        shell: powershell
-        run: |
-
-          Write-Host "=============================================="
-          Write-Host "COMPROBANDO SINTAXIS PYTHON"
-          Write-Host "=============================================="
-
-          $pythonExe = "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe"
-
-          if (!(Test-Path $pythonExe)) {
-            $pythonExe = "$env:ProgramFiles(x86)\Python37-32\python.exe"
-          }
-
-          if (!(Test-Path $pythonExe)) {
-            $pythonExe = "$env:ProgramFiles(x86)\Python37\python.exe"
-          }
-
-          if (!(Test-Path $pythonExe)) {
-            Write-Error "No se encontró Python 3.7.9 x86."
-            exit 1
-          }
-
-          $files = @(
-            "main.py",
-            "tester.py",
-            "core\scanner.py",
-            "core\printer.py",
-            "core\image_processor.py",
-            "core\config_manager.py",
-            "core\network.py",
-            "ui\config_window.py"
-          )
-
-          foreach ($file in $files) {
-
-            Write-Host ""
-            Write-Host "Comprobando:"
-            Write-Host $file
-
-            & $pythonExe -m py_compile $file
-
-            if ($LASTEXITCODE -ne 0) {
-              Write-Error "Error de sintaxis en: $file"
-              exit 1
-            }
-          }
-
-          Write-Host ""
-          Write-Host "Sintaxis correcta."
-
-
-      # ============================================================
-      # 10. Compilar aplicación principal
-      # ============================================================
-      - name: Compilar Copiadora de Oficios
-        shell: powershell
-        run: |
-
-          Write-Host "=============================================="
-          Write-Host "COMPILANDO COPIADORA DE OFICIOS"
-          Write-Host "=============================================="
-
-          $pythonExe = "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe"
-
-          if (!(Test-Path $pythonExe)) {
-            $pythonExe = "$env:ProgramFiles(x86)\Python37-32\python.exe"
-          }
-
-          if (!(Test-Path $pythonExe)) {
-            $pythonExe = "$env:ProgramFiles(x86)\Python37\python.exe"
-          }
-
-          if (!(Test-Path $pythonExe)) {
-            Write-Error "No se encontró Python 3.7.9 x86."
-            exit 1
-          }
-
-          Write-Host ""
-          Write-Host "Python utilizado para compilar:"
-          Write-Host $pythonExe
-
-          & $pythonExe -m PyInstaller `
-            --noconfirm `
-            --clean `
-            --onefile `
-            --windowed `
-            --name "CopiadoraDeOficios" `
-            --icon "copiadora.ico" `
-            --add-data "config.json;." `
-            --paths "." `
-            --hidden-import "win32com.client" `
-            --hidden-import "pythoncom" `
-            --hidden-import "pywintypes" `
-            --hidden-import "win32api" `
-            --hidden-import "win32print" `
-            --hidden-import "win32ui" `
-            --hidden-import "win32con" `
-            --hidden-import "PIL.Image" `
-            --hidden-import "PIL.ImageWin" `
-            "main.py"
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "PyInstaller no pudo compilar la aplicación."
-            exit 1
-          }
-
-          Write-Host ""
-          Write-Host "PyInstaller terminó correctamente."
-
-
-      # ============================================================
-      # 11. Verificar EXE generado
-      # ============================================================
-      - name: Verificar EXE generado
-        shell: powershell
-        run: |
-
-          Write-Host "=============================================="
-          Write-Host "VERIFICANDO EXE"
-          Write-Host "=============================================="
-
-          $exe = "dist\CopiadoraDeOficios.exe"
-
-          if (!(Test-Path $exe)) {
-            Write-Error "No se encontró el EXE generado."
-            exit 1
-          }
-
-          $file = Get-Item $exe
-
-          Write-Host ""
-          Write-Host "EXE generado correctamente:"
-          Write-Host $file.FullName
-
-          Write-Host ""
-          Write-Host "Tamaño:"
-          Write-Host $file.Length "bytes"
-
-
-      # ============================================================
-      # 12. Crear paquete final
-      # ============================================================
-      - name: Preparar paquete final
-        shell: powershell
-        run: |
-
-          Write-Host "=============================================="
-          Write-Host "PREPARANDO PAQUETE FINAL"
-          Write-Host "=============================================="
-
-          New-Item `
-            -ItemType Directory `
-            -Force `
-            -Path "release" | Out-Null
-
-          Copy-Item `
-            "dist\CopiadoraDeOficios.exe" `
-            "release\CopiadoraDeOficios.exe"
-
-          Copy-Item `
-            "config.json" `
-            "release\config.json"
-
-          Write-Host ""
-          Write-Host "Contenido final:"
-          Get-ChildItem -Recurse "release"
-
-
-      # ============================================================
-      # 13. Publicar EXE como Artifact
-      # ============================================================
-      - name: Publicar EXE
-        uses: actions/upload-artifact@v4
-        with:
-          name: CopiadoraDeOficios-Windows-x86
-          path: release/
-          if-no-files-found: error
-          retention-days: 30
+        }
+        if ($null -eq $pythonExe) { exit 1 }
+        & $pythonExe -c 'import sys, struct; print("Python:", sys.version); print("Arquitectura:", struct.calcsize("P") * 8, "bits"); assert sys.version_info[:3] == (3,7,9); assert struct.calcsize("P") * 8 == 32'
+
+    - name: Preparar pip
+      shell: powershell
+      run: |
+        $pythonExe = "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe"
+        & $pythonExe -m ensurepip --upgrade
+        & $pythonExe -m pip install --upgrade "pip<24.1" "setuptools<68" "wheel<0.42"
+
+    - name: Instalar dependencias
+      shell: powershell
+      run: |
+        $pythonExe = "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe"
+        & $pythonExe -m pip install numpy==1.21.6 opencv-python==4.5.5.64 Pillow==9.5.0 pywin32==306 pyinstaller==5.13.2
+
+    - name: Verificar dependencias
+      shell: powershell
+      run: |
+        $pythonExe = "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe"
+        & $pythonExe -c 'import numpy; print("NumPy:", numpy.__version__)'
+        & $pythonExe -c 'import cv2; print("OpenCV:", cv2.__version__)'
+        & $pythonExe -c 'import PIL; print("Pillow:", PIL.__version__)'
+        & $pythonExe -c 'import win32api; print("pywin32: OK")'
+        & $pythonExe -m PyInstaller --version
+
+    - name: Compilar Copiadora de Oficios
+      shell: powershell
+      run: |
+        $pythonExe = "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe"
+        & $pythonExe -m PyInstaller --noconfirm --clean --onefile --windowed --name "CopiadoraDeOficios" --icon "copiadora.ico" --add-data "config.json;." --paths "." --hidden-import "win32com.client" --hidden-import "pythoncom" --hidden-import "pywintypes" --hidden-import "win32api" --hidden-import "win32print" --hidden-import "win32ui" --hidden-import "win32con" --hidden-import "PIL.Image" --hidden-import "PIL.ImageWin" "main.py"
+
+    - name: Publicar EXE
+      uses: actions/upload-artifact@v4
+      with:
+        name: CopiadoraDeOficios-Windows-x86
+        path: dist/CopiadoraDeOficios.exe
+        if-no-files-found: error
+        retention-days: 30
