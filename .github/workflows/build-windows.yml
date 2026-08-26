@@ -33,48 +33,36 @@ jobs:
           Start-Process -FilePath $pythonInstaller -ArgumentList "/quiet InstallAllUsers=0 PrependPath=0 Include_pip=1 Include_test=0" -Wait -NoNewWindow
 
       - name: Localizar Python 3.7.9 x86
-        shell: powershell
+        shell: cmd
         run: |
-          $candidates = @(
-            "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe",
-            "$env:ProgramFiles(x86)\Python37-32\python.exe",
-            "$env:ProgramFiles(x86)\Python37\python.exe"
-          )
-          $pythonExe = $null
-          foreach ($candidate in $candidates) {
-            if (Test-Path $candidate) {
-              $version = & $candidate --version 2>&1
-              if ($version -match "Python 3\.7\.9") {
-                $pythonExe = $candidate
-                break
-              }
-            }
-          }
-          if ($null -eq $pythonExe) { exit 1 }
-          & $pythonExe -c 'import sys, struct; print("Python:", sys.version); print("Arquitectura:", struct.calcsize("P") * 8, "bits"); assert sys.version_info[:3] == (3,7,9); assert struct.calcsize("P") * 8 == 32'
+          set PYTHON_EXE=%LOCALAPPDATA%\Programs\Python\Python37-32\python.exe
+          if not exist "%PYTHON_EXE%" set PYTHON_EXE=%ProgramFiles(x86)%\Python37-32\python.exe
+          if not exist "%PYTHON_EXE%" set PYTHON_EXE=%ProgramFiles(x86)%\Python37\python.exe
+          if not exist "%PYTHON_EXE%" exit 1
+          "%PYTHON_EXE%" -c "import sys, struct; print('Python:', sys.version); print('Arquitectura:', struct.calcsize('P') * 8, 'bits'); assert sys.version_info[:3] == (3,7,9); assert struct.calcsize('P') * 8 == 32"
 
       - name: Preparar pip
-        shell: powershell
+        shell: cmd
         run: |
-          $pythonExe = "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe"
-          & $pythonExe -m ensurepip --upgrade
-          & $pythonExe -m pip install --upgrade "pip<24.1" "setuptools<68" "wheel<0.42"
+          set PYTHON_EXE=%LOCALAPPDATA%\Programs\Python\Python37-32\python.exe
+          "%PYTHON_EXE%" -m ensurepip --upgrade
+          "%PYTHON_EXE%" -m pip install --upgrade pip==23.2.1 setuptools==67.8.0 wheel==0.41.0
 
       - name: Instalar dependencias
-        shell: powershell
+        shell: cmd
         run: |
-          $pythonExe = "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe"
-          & $pythonExe -m pip install numpy==1.21.6 opencv-python==4.5.5.64 Pillow==9.5.0 pywin32==306 pyinstaller==5.13.2
+          set PYTHON_EXE=%LOCALAPPDATA%\Programs\Python\Python37-32\python.exe
+          "%PYTHON_EXE%" -m pip install numpy==1.21.6 opencv-python==4.5.5.64 Pillow==9.5.0 pywin32==306 pyinstaller==5.13.2
 
       - name: Verificar dependencias
-        shell: powershell
+        shell: cmd
         run: |
-          $pythonExe = "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe"
-          & $pythonExe -c 'import numpy; print("NumPy:", numpy.__version__)'
-          & $pythonExe -c 'import cv2; print("OpenCV:", cv2.__version__)'
-          & $pythonExe -c 'import PIL; print("Pillow:", PIL.__version__)'
-          & $pythonExe -c 'import win32api; print("pywin32: OK")'
-          & $pythonExe -m PyInstaller --version
+          set PYTHON_EXE=%LOCALAPPDATA%\Programs\Python\Python37-32\python.exe
+          "%PYTHON_EXE%" -c "import numpy; print('NumPy:', numpy.__version__)"
+          "%PYTHON_EXE%" -c "import cv2; print('OpenCV:', cv2.__version__)"
+          "%PYTHON_EXE%" -c "import PIL; print('Pillow:', PIL.__version__)"
+          "%PYTHON_EXE%" -c "import win32api; print('pywin32: OK')"
+          "%PYTHON_EXE%" -m PyInstaller --version
 
       - name: Comprobar archivos del proyecto
         shell: powershell
@@ -85,20 +73,16 @@ jobs:
           }
 
       - name: Comprobar sintaxis del proyecto
-        shell: powershell
+        shell: cmd
         run: |
-          $pythonExe = "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe"
-          $files = @("main.py","tester.py","core\scanner.py","core\printer.py","core\image_processor.py","core\config_manager.py","core\network.py","ui\config_window.py")
-          foreach ($file in $files) {
-            & $pythonExe -m py_compile $file
-            if ($LASTEXITCODE -ne 0) { exit 1 }
-          }
+          set PYTHON_EXE=%LOCALAPPDATA%\Programs\Python\Python37-32\python.exe
+          "%PYTHON_EXE%" -m py_compile main.py tester.py core\scanner.py core\printer.py core\image_processor.py core\config_manager.py core\network.py ui\config_window.py
 
       - name: Compilar Copiadora de Oficios
-        shell: powershell
+        shell: cmd
         run: |
-          $pythonExe = "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe"
-          & $pythonExe -m PyInstaller --noconfirm --clean --onefile --windowed --name "CopiadoraDeOficios" --icon "copiadora.ico" --add-data "config.json;." --paths "." --hidden-import "win32com.client" --hidden-import "pythoncom" --hidden-import "pywintypes" --hidden-import "win32api" --hidden-import "win32print" --hidden-import "win32ui" --hidden-import "win32con" --hidden-import "PIL.Image" --hidden-import "PIL.ImageWin" "main.py"
+          set PYTHON_EXE=%LOCALAPPDATA%\Programs\Python\Python37-32\python.exe
+          "%PYTHON_EXE%" -m PyInstaller --noconfirm --clean --onefile --windowed --name CopiadoraDeOficios --icon copiadora.ico --add-data "config.json;." --paths . --hidden-import win32com.client --hidden-import pythoncom --hidden-import pywintypes --hidden-import win32api --hidden-import win32print --hidden-import win32ui --hidden-import win32con --hidden-import PIL.Image --hidden-import PIL.ImageWin main.py
 
       - name: Verificar EXE generado
         shell: powershell
