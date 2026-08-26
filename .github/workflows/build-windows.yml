@@ -82,85 +82,56 @@ jobs:
           Write-Host "BUSCANDO PYTHON 3.7.9 X86"
           Write-Host "=============================================="
 
-          $possiblePaths = @(
-            "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe",
-            "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe",
-            "$env:ProgramFiles(x86)\Python37-32\python.exe",
-            "$env:ProgramFiles(x86)\Python37\python.exe"
-          )
+          $pythonExe = "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe"
 
-          $pythonExe = $null
+          Write-Host "Ruta esperada:"
+          Write-Host $pythonExe
 
-          foreach ($path in $possiblePaths) {
-
-            Write-Host "Comprobando:"
-            Write-Host $path
-
-            if (Test-Path $path) {
-              $pythonExe = $path
-              break
-            }
-          }
-
-          if ($null -eq $pythonExe) {
+          if (!(Test-Path $pythonExe)) {
 
             Write-Host ""
-            Write-Host "No se encontró Python en las rutas conocidas."
-            Write-Host ""
-            Write-Host "Buscando python.exe relacionado con Python 3.7..."
+            Write-Host "No se encontró Python en la ruta esperada."
+            Write-Host "Buscando instalaciones alternativas..."
 
-            $searchLocations = @(
-              "$env:LOCALAPPDATA\Programs\Python",
-              "$env:ProgramFiles(x86)",
-              "$env:ProgramFiles"
+            $candidates = @(
+              "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe",
+              "$env:ProgramFiles(x86)\Python37-32\python.exe",
+              "$env:ProgramFiles(x86)\Python37\python.exe"
             )
 
-            foreach ($location in $searchLocations) {
+            $pythonExe = $null
 
-              if (Test-Path $location) {
+            foreach ($candidate in $candidates) {
 
-                $found = Get-ChildItem `
-                  -Path $location `
-                  -Filter "python.exe" `
-                  -Recurse `
-                  -ErrorAction SilentlyContinue
+              Write-Host "Comprobando:"
+              Write-Host $candidate
 
-                foreach ($item in $found) {
-
-                  try {
-
-                    $versionOutput = & $item.FullName --version 2>&1
-
-                    if ($versionOutput -match "Python 3\.7\.9") {
-                      $pythonExe = $item.FullName
-                      break
-                    }
-
-                  } catch {
-                  }
-                }
-              }
-
-              if ($null -ne $pythonExe) {
+              if (Test-Path $candidate) {
+                $pythonExe = $candidate
                 break
               }
             }
           }
 
           if ($null -eq $pythonExe) {
-            Write-Error "NO SE ENCONTRÓ PYTHON 3.7.9."
+            Write-Error "NO SE ENCONTRÓ PYTHON 3.7.9 X86."
             exit 1
           }
 
           Write-Host ""
           Write-Host "=============================================="
-          Write-Host "PYTHON 3.7.9 ENCONTRADO"
+          Write-Host "PYTHON 3.7.9 X86 ENCONTRADO"
           Write-Host "=============================================="
           Write-Host $pythonExe
 
-          "PYTHON37_X86=$pythonExe" | Out-File `
-            -FilePath $env:GITHUB_ENV `
-            -Encoding utf8
+          & $pythonExe --version
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "No se pudo ejecutar el Python encontrado."
+            exit 1
+          }
+
+          "PYTHON37_X86=$pythonExe" >> $env:GITHUB_ENV
 
 
       # ============================================================
@@ -186,7 +157,7 @@ jobs:
           & $env:PYTHON37_X86 -c "import sys, struct; print('Python:', sys.version); print('Arquitectura:', struct.calcsize('P') * 8, 'bits'); assert sys.version_info[:3] == (3,7,9); assert struct.calcsize('P') * 8 == 32"
 
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "Python encontrado no es Python 3.7.9 x86."
+            Write-Error "El Python encontrado no es Python 3.7.9 x86."
             exit 1
           }
 
@@ -195,7 +166,7 @@ jobs:
 
 
       # ============================================================
-      # 6. Obtener pip del Python seleccionado
+      # 6. Preparar pip compatible con Python 3.7
       # ============================================================
       - name: Preparar pip
         shell: powershell
@@ -206,65 +177,74 @@ jobs:
 
           & $env:PYTHON37_X86 -m ensurepip --upgrade
 
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "ensurepip no pudo preparar pip."
+            exit 1
+          }
+
           & $env:PYTHON37_X86 -m pip install --upgrade `
             "pip<24.1" `
             "setuptools<68" `
             "wheel<0.42"
 
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "No se pudo preparar pip."
+            Write-Error "No se pudo preparar pip correctamente."
             exit 1
           }
 
 
       # ============================================================
-      # 7. Instalar dependencias exactas
+      # 7. Instalar dependencias exactas del proyecto
       # ============================================================
       - name: Instalar dependencias
         shell: powershell
         run: |
-
           Write-Host "=============================================="
           Write-Host "INSTALANDO DEPENDENCIAS"
           Write-Host "=============================================="
 
-          & $env:PYTHON37_X86 -m pip install `
-            "numpy==1.21.6"
+          Write-Host ""
+          Write-Host "Instalando NumPy 1.21.6..."
+          & $env:PYTHON37_X86 -m pip install "numpy==1.21.6"
 
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "Falló la instalación de NumPy."
+            Write-Error "Falló la instalación de NumPy 1.21.6."
             exit 1
           }
 
-          & $env:PYTHON37_X86 -m pip install `
-            "opencv-python==4.5.5.64"
+          Write-Host ""
+          Write-Host "Instalando OpenCV-Python 4.5.5.64..."
+          & $env:PYTHON37_X86 -m pip install "opencv-python==4.5.5.64"
 
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "Falló la instalación de OpenCV."
+            Write-Error "Falló la instalación de OpenCV-Python 4.5.5.64."
             exit 1
           }
 
-          & $env:PYTHON37_X86 -m pip install `
-            "Pillow==9.5.0"
+          Write-Host ""
+          Write-Host "Instalando Pillow 9.5.0..."
+          & $env:PYTHON37_X86 -m pip install "Pillow==9.5.0"
 
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "Falló la instalación de Pillow."
+            Write-Error "Falló la instalación de Pillow 9.5.0."
             exit 1
           }
 
-          & $env:PYTHON37_X86 -m pip install `
-            "pywin32==306"
+          Write-Host ""
+          Write-Host "Instalando pywin32 306..."
+          & $env:PYTHON37_X86 -m pip install "pywin32==306"
 
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "Falló la instalación de pywin32."
+            Write-Error "Falló la instalación de pywin32 306."
             exit 1
           }
 
-          & $env:PYTHON37_X86 -m pip install `
-            "pyinstaller==5.13.2"
+          Write-Host ""
+          Write-Host "Instalando PyInstaller 5.13.2..."
+          & $env:PYTHON37_X86 -m pip install "pyinstaller==5.13.2"
 
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "Falló la instalación de PyInstaller."
+            Write-Error "Falló la instalación de PyInstaller 5.13.2."
             exit 1
           }
 
@@ -275,36 +255,59 @@ jobs:
       - name: Verificar dependencias
         shell: powershell
         run: |
-
           Write-Host "=============================================="
           Write-Host "VERIFICANDO DEPENDENCIAS"
           Write-Host "=============================================="
 
-          & $env:PYTHON37_X86 -c "import sys, struct; print('Python:', sys.version); print('Arquitectura:', struct.calcsize('P') * 8, 'bits')"
+          & $env:PYTHON37_X86 -c "import sys, struct; print('Python:', sys.version); print('Arquitectura Python:', struct.calcsize('P') * 8, 'bits')"
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "No se pudo verificar Python."
+            exit 1
+          }
 
           & $env:PYTHON37_X86 -c "import numpy; print('NumPy:', numpy.__version__)"
 
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "No se pudo importar NumPy."
+            exit 1
+          }
+
           & $env:PYTHON37_X86 -c "import cv2; print('OpenCV:', cv2.__version__)"
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "No se pudo importar OpenCV."
+            exit 1
+          }
 
           & $env:PYTHON37_X86 -c "import PIL; print('Pillow:', PIL.__version__)"
 
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "No se pudo importar Pillow."
+            exit 1
+          }
+
           & $env:PYTHON37_X86 -c "import win32api; print('pywin32: OK')"
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "No se pudo importar pywin32."
+            exit 1
+          }
 
           & $env:PYTHON37_X86 -m PyInstaller --version
 
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "Falló la comprobación de dependencias."
+            Write-Error "No se pudo ejecutar PyInstaller."
             exit 1
           }
 
 
       # ============================================================
-      # 9. Comprobar archivos del proyecto
+      # 9. Comprobar estructura del proyecto
       # ============================================================
       - name: Comprobar archivos del proyecto
         shell: powershell
         run: |
-
           Write-Host "=============================================="
           Write-Host "VERIFICANDO ESTRUCTURA DEL PROYECTO"
           Write-Host "=============================================="
@@ -336,12 +339,11 @@ jobs:
 
 
       # ============================================================
-      # 10. Comprobar sintaxis
+      # 10. Comprobar sintaxis del proyecto
       # ============================================================
       - name: Comprobar sintaxis del proyecto
         shell: powershell
         run: |
-
           Write-Host "=============================================="
           Write-Host "COMPROBANDO SINTAXIS PYTHON"
           Write-Host "=============================================="
@@ -359,7 +361,8 @@ jobs:
 
           foreach ($file in $files) {
 
-            Write-Host "Comprobando: $file"
+            Write-Host "Comprobando:"
+            Write-Host $file
 
             & $env:PYTHON37_X86 -m py_compile $file
 
@@ -374,12 +377,11 @@ jobs:
 
 
       # ============================================================
-      # 11. Compilar EXE
+      # 11. Compilar la aplicación principal
       # ============================================================
       - name: Compilar Copiadora de Oficios
         shell: powershell
         run: |
-
           Write-Host "=============================================="
           Write-Host "COMPILANDO COPIADORA DE OFICIOS"
           Write-Host "=============================================="
@@ -411,12 +413,11 @@ jobs:
 
 
       # ============================================================
-      # 12. Verificar EXE
+      # 12. Verificar EXE generado
       # ============================================================
       - name: Verificar EXE generado
         shell: powershell
         run: |
-
           Write-Host "=============================================="
           Write-Host "VERIFICANDO EXE"
           Write-Host "=============================================="
@@ -430,8 +431,10 @@ jobs:
 
           $file = Get-Item $exe
 
+          Write-Host ""
           Write-Host "EXE generado correctamente:"
           Write-Host $file.FullName
+
           Write-Host ""
           Write-Host "Tamaño:"
           Write-Host $file.Length "bytes"
@@ -443,9 +446,8 @@ jobs:
       - name: Preparar paquete final
         shell: powershell
         run: |
-
           Write-Host "=============================================="
-          Write-Host "PREPARANDO PAQUETE"
+          Write-Host "PREPARANDO PAQUETE FINAL"
           Write-Host "=============================================="
 
           New-Item `
@@ -467,7 +469,7 @@ jobs:
 
 
       # ============================================================
-      # 14. Publicar Artifact
+      # 14. Publicar EXE como Artifact
       # ============================================================
       - name: Publicar EXE
         uses: actions/upload-artifact@v4
