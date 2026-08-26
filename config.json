@@ -1,0 +1,11 @@
+{
+    "server_ip": "0.0.0.0",
+    "port": 5000,
+    "scanner1": "",
+    "scanner2": "",
+    "impresora": "",
+    "modo": "BN",
+    "last_ip": "192.168.1.10",
+    "ip": "192.168.100.99",
+    "mejoramiento": false
+}
