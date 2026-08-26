@@ -15,76 +15,121 @@ jobs:
     runs-on: windows-2022
 
     steps:
-    - name: Descargar código del proyecto
-      uses: actions/checkout@v4
 
-    - name: Descargar Python 3.7.9 x86
-      shell: powershell
-      run: |
-        $pythonUrl = "https://www.python.org/ftp/python/3.7.9/python-3.7.9.exe"
-        $pythonInstaller = "$env:RUNNER_TEMP\python-3.7.9-x86.exe"
-        Invoke-WebRequest -Uri $pythonUrl -OutFile $pythonInstaller
+      # 1. Descargar código del repositorio
+      - name: Descargar código del proyecto
+        uses: actions/checkout@v4
 
-    - name: Instalar Python 3.7.9 x86
-      shell: powershell
-      run: |
-        $pythonInstaller = "$env:RUNNER_TEMP\python-3.7.9-x86.exe"
-        Start-Process -FilePath $pythonInstaller -ArgumentList "/quiet InstallAllUsers=0 PrependPath=0 Include_pip=1 Include_test=0" -Wait -NoNewWindow
+      # 2. Descargar Python 3.7.9 x86
+      - name: Descargar Python 3.7.9 x86
+        shell: powershell
+        run: |
+          $pythonUrl = "https://www.python.org/ftp/python/3.7.9/python-3.7.9.exe"
+          $pythonInstaller = "$env:RUNNER_TEMP\python-3.7.9-x86.exe"
+          Invoke-WebRequest -Uri $pythonUrl -OutFile $pythonInstaller
 
-    - name: Localizar Python 3.7.9 x86
-      shell: powershell
-      run: |
-        $candidates = @(
-          "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe",
-          "$env:ProgramFiles(x86)\Python37-32\python.exe",
-          "$env:ProgramFiles(x86)\Python37\python.exe"
-        )
-        $pythonExe = $null
-        foreach ($candidate in $candidates) {
-          if (Test-Path $candidate) {
-            $version = & $candidate --version 2>&1
-            if ($version -match "Python 3\.7\.9") {
-              $pythonExe = $candidate
-              break
+      # 3. Instalar Python 3.7.9 x86
+      - name: Instalar Python 3.7.9 x86
+        shell: powershell
+        run: |
+          $pythonInstaller = "$env:RUNNER_TEMP\python-3.7.9-x86.exe"
+          Start-Process -FilePath $pythonInstaller -ArgumentList "/quiet InstallAllUsers=0 PrependPath=0 Include_pip=1 Include_test=0" -Wait -NoNewWindow
+
+      # 4. Localizar y verificar Python
+      - name: Localizar Python 3.7.9 x86
+        shell: powershell
+        run: |
+          $candidates = @(
+            "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe",
+            "$env:ProgramFiles(x86)\Python37-32\python.exe",
+            "$env:ProgramFiles(x86)\Python37\python.exe"
+          )
+          $pythonExe = $null
+          foreach ($candidate in $candidates) {
+            if (Test-Path $candidate) {
+              $version = & $candidate --version 2>&1
+              if ($version -match "Python 3\.7\.9") {
+                $pythonExe = $candidate
+                break
+              }
             }
           }
-        }
-        if ($null -eq $pythonExe) { exit 1 }
-        & $pythonExe -c 'import sys, struct; print("Python:", sys.version); print("Arquitectura:", struct.calcsize("P") * 8, "bits"); assert sys.version_info[:3] == (3,7,9); assert struct.calcsize("P") * 8 == 32'
+          if ($null -eq $pythonExe) { exit 1 }
+          & $pythonExe -c 'import sys, struct; print("Python:", sys.version); print("Arquitectura:", struct.calcsize("P") * 8, "bits"); assert sys.version_info[:3] == (3,7,9); assert struct.calcsize("P") * 8 == 32'
 
-    - name: Preparar pip
-      shell: powershell
-      run: |
-        $pythonExe = "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe"
-        & $pythonExe -m ensurepip --upgrade
-        & $pythonExe -m pip install --upgrade "pip<24.1" "setuptools<68" "wheel<0.42"
+      # 5. Preparar pip
+      - name: Preparar pip
+        shell: powershell
+        run: |
+          $pythonExe = "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe"
+          & $pythonExe -m ensurepip --upgrade
+          & $pythonExe -m pip install --upgrade "pip<24.1" "setuptools<68" "wheel<0.42"
 
-    - name: Instalar dependencias
-      shell: powershell
-      run: |
-        $pythonExe = "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe"
-        & $pythonExe -m pip install numpy==1.21.6 opencv-python==4.5.5.64 Pillow==9.5.0 pywin32==306 pyinstaller==5.13.2
+      # 6. Instalar dependencias exactas
+      - name: Instalar dependencias
+        shell: powershell
+        run: |
+          $pythonExe = "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe"
+          & $pythonExe -m pip install numpy==1.21.6 opencv-python==4.5.5.64 Pillow==9.5.0 pywin32==306 pyinstaller==5.13.2
 
-    - name: Verificar dependencias
-      shell: powershell
-      run: |
-        $pythonExe = "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe"
-        & $pythonExe -c 'import numpy; print("NumPy:", numpy.__version__)'
-        & $pythonExe -c 'import cv2; print("OpenCV:", cv2.__version__)'
-        & $pythonExe -c 'import PIL; print("Pillow:", PIL.__version__)'
-        & $pythonExe -c 'import win32api; print("pywin32: OK")'
-        & $pythonExe -m PyInstaller --version
+      # 7. Verificar dependencias
+      - name: Verificar dependencias
+        shell: powershell
+        run: |
+          $pythonExe = "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe"
+          & $pythonExe -c 'import numpy; print("NumPy:", numpy.__version__)'
+          & $pythonExe -c 'import cv2; print("OpenCV:", cv2.__version__)'
+          & $pythonExe -c 'import PIL; print("Pillow:", PIL.__version__)'
+          & $pythonExe -c 'import win32api; print("pywin32: OK")'
+          & $pythonExe -m PyInstaller --version
 
-    - name: Compilar Copiadora de Oficios
-      shell: powershell
-      run: |
-        $pythonExe = "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe"
-        & $pythonExe -m PyInstaller --noconfirm --clean --onefile --windowed --name "CopiadoraDeOficios" --icon "copiadora.ico" --add-data "config.json;." --paths "." --hidden-import "win32com.client" --hidden-import "pythoncom" --hidden-import "pywintypes" --hidden-import "win32api" --hidden-import "win32print" --hidden-import "win32ui" --hidden-import "win32con" --hidden-import "PIL.Image" --hidden-import "PIL.ImageWin" "main.py"
+      # 8. Comprobar estructura del proyecto
+      - name: Comprobar archivos del proyecto
+        shell: powershell
+        run: |
+          $requiredFiles = @("main.py","config.json","copiadora.ico","core\scanner.py","core\printer.py","core\image_processor.py","core\config_manager.py","core\network.py","ui\config_window.py")
+          foreach ($file in $requiredFiles) {
+            if (!(Test-Path $file)) { exit 1 }
+          }
 
-    - name: Publicar EXE
-      uses: actions/upload-artifact@v4
-      with:
-        name: CopiadoraDeOficios-Windows-x86
-        path: dist/CopiadoraDeOficios.exe
-        if-no-files-found: error
-        retention-days: 30
+      # 9. Comprobar sintaxis
+      - name: Comprobar sintaxis del proyecto
+        shell: powershell
+        run: |
+          $pythonExe = "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe"
+          $files = @("main.py","tester.py","core\scanner.py","core\printer.py","core\image_processor.py","core\config_manager.py","core\network.py","ui\config_window.py")
+          foreach ($file in $files) {
+            & $pythonExe -m py_compile $file
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+          }
+
+      # 10. Compilar aplicación principal
+      - name: Compilar Copiadora de Oficios
+        shell: powershell
+        run: |
+          $pythonExe = "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe"
+          & $pythonExe -m PyInstaller --noconfirm --clean --onefile --windowed --name "CopiadoraDeOficios" --icon "copiadora.ico" --add-data "config.json;." --paths "." --hidden-import "win32com.client" --hidden-import "pythoncom" --hidden-import "pywintypes" --hidden-import "win32api" --hidden-import "win32print" --hidden-import "win32ui" --hidden-import "win32con" --hidden-import "PIL.Image" --hidden-import "PIL.ImageWin" "main.py"
+
+      # 11. Verificar EXE generado
+      - name: Verificar EXE generado
+        shell: powershell
+        run: |
+          $exe = "dist\CopiadoraDeOficios.exe"
+          if (!(Test-Path $exe)) { exit 1 }
+
+      # 12. Crear paquete final
+      - name: Preparar paquete final
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path "release" | Out-Null
+          Copy-Item "dist\CopiadoraDeOficios.exe" "release\CopiadoraDeOficios.exe"
+          Copy-Item "config.json" "release\config.json"
+
+      # 13. Publicar EXE como Artifact
+      - name: Publicar EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: CopiadoraDeOficios-Windows-x86
+          path: release/
+          if-no-files-found: error
+          retention-days: 30
