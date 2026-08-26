@@ -16,11 +16,9 @@ jobs:
 
     steps:
 
-      # 1. Descargar código del repositorio
       - name: Descargar código del proyecto
         uses: actions/checkout@v4
 
-      # 2. Descargar Python 3.7.9 x86
       - name: Descargar Python 3.7.9 x86
         shell: powershell
         run: |
@@ -28,14 +26,12 @@ jobs:
           $pythonInstaller = "$env:RUNNER_TEMP\python-3.7.9-x86.exe"
           Invoke-WebRequest -Uri $pythonUrl -OutFile $pythonInstaller
 
-      # 3. Instalar Python 3.7.9 x86
       - name: Instalar Python 3.7.9 x86
         shell: powershell
         run: |
           $pythonInstaller = "$env:RUNNER_TEMP\python-3.7.9-x86.exe"
           Start-Process -FilePath $pythonInstaller -ArgumentList "/quiet InstallAllUsers=0 PrependPath=0 Include_pip=1 Include_test=0" -Wait -NoNewWindow
 
-      # 4. Localizar y verificar Python
       - name: Localizar Python 3.7.9 x86
         shell: powershell
         run: |
@@ -57,7 +53,6 @@ jobs:
           if ($null -eq $pythonExe) { exit 1 }
           & $pythonExe -c 'import sys, struct; print("Python:", sys.version); print("Arquitectura:", struct.calcsize("P") * 8, "bits"); assert sys.version_info[:3] == (3,7,9); assert struct.calcsize("P") * 8 == 32'
 
-      # 5. Preparar pip
       - name: Preparar pip
         shell: powershell
         run: |
@@ -65,14 +60,12 @@ jobs:
           & $pythonExe -m ensurepip --upgrade
           & $pythonExe -m pip install --upgrade "pip<24.1" "setuptools<68" "wheel<0.42"
 
-      # 6. Instalar dependencias exactas
       - name: Instalar dependencias
         shell: powershell
         run: |
           $pythonExe = "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe"
           & $pythonExe -m pip install numpy==1.21.6 opencv-python==4.5.5.64 Pillow==9.5.0 pywin32==306 pyinstaller==5.13.2
 
-      # 7. Verificar dependencias
       - name: Verificar dependencias
         shell: powershell
         run: |
@@ -83,7 +76,6 @@ jobs:
           & $pythonExe -c 'import win32api; print("pywin32: OK")'
           & $pythonExe -m PyInstaller --version
 
-      # 8. Comprobar estructura del proyecto
       - name: Comprobar archivos del proyecto
         shell: powershell
         run: |
@@ -92,7 +84,6 @@ jobs:
             if (!(Test-Path $file)) { exit 1 }
           }
 
-      # 9. Comprobar sintaxis
       - name: Comprobar sintaxis del proyecto
         shell: powershell
         run: |
@@ -103,21 +94,18 @@ jobs:
             if ($LASTEXITCODE -ne 0) { exit 1 }
           }
 
-      # 10. Compilar aplicación principal
       - name: Compilar Copiadora de Oficios
         shell: powershell
         run: |
           $pythonExe = "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe"
           & $pythonExe -m PyInstaller --noconfirm --clean --onefile --windowed --name "CopiadoraDeOficios" --icon "copiadora.ico" --add-data "config.json;." --paths "." --hidden-import "win32com.client" --hidden-import "pythoncom" --hidden-import "pywintypes" --hidden-import "win32api" --hidden-import "win32print" --hidden-import "win32ui" --hidden-import "win32con" --hidden-import "PIL.Image" --hidden-import "PIL.ImageWin" "main.py"
 
-      # 11. Verificar EXE generado
       - name: Verificar EXE generado
         shell: powershell
         run: |
           $exe = "dist\CopiadoraDeOficios.exe"
           if (!(Test-Path $exe)) { exit 1 }
 
-      # 12. Crear paquete final
       - name: Preparar paquete final
         shell: powershell
         run: |
@@ -125,7 +113,6 @@ jobs:
           Copy-Item "dist\CopiadoraDeOficios.exe" "release\CopiadoraDeOficios.exe"
           Copy-Item "config.json" "release\config.json"
 
-      # 13. Publicar EXE como Artifact
       - name: Publicar EXE
         uses: actions/upload-artifact@v4
         with:
