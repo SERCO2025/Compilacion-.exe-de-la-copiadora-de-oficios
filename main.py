@@ -48,6 +48,7 @@ class IndicadorEstado:
     def __init__(self, parent):
         self.parent = parent
         self.var = tk.StringVar(value="Listo")
+
         self.entry = tk.Entry(
             parent,
             textvariable=self.var,
@@ -62,6 +63,7 @@ class IndicadorEstado:
             highlightthickness=0,
         )
         self.entry.pack(fill="x", padx=15, pady=(0, 8), ipady=4)
+
         self.entry.bind("<Shift-MouseWheel>", self.desplazar_horizontal)
         self.entry.bind("<MouseWheel>", self.desplazar_horizontal)
         self.entry.bind("<Left>", lambda event: self.entry.xview_scroll(-1, "units"))
@@ -93,15 +95,14 @@ class BotonChingon(tk.Canvas):
 
     def dibujar_boton(self, offset=0):
         self.delete("all")
-        w = int(self.cget("width"))
-        h = int(self.cget("height"))
+        w, h = int(self.cget("width")), int(self.cget("height"))
         self.create_rectangle(5, 5, w, h, fill="#001a33", outline="")
-        self.rect = self.create_rectangle(offset, offset, w - 5 + offset, h - 5 + offset, fill=self.color, outline="")
-        self.create_line(offset, offset, w - 5 + offset, offset, fill="#ffffff", width=2)
-        self.create_line(offset, offset, offset, h - 5 + offset, fill="#ffffff", width=2)
-        self.create_line(w - 5 + offset, offset, w - 5 + offset, h - 5 + offset, fill="#333333", width=3)
-        self.create_line(offset, h - 5 + offset, w - 5 + offset, h - 5 + offset, fill="#333333", width=3)
-        self.create_text((w - 5) // 2 + offset, (h - 5) // 2 + offset, text=self.text, fill=self.fg, font=("Impact", 16))
+        self.rect = self.create_rectangle(offset, offset, w-5+offset, h-5+offset, fill=self.color, outline="")
+        self.create_line(offset, offset, w-5+offset, offset, fill="#ffffff", width=2)
+        self.create_line(offset, offset, offset, h-5+offset, fill="#ffffff", width=2)
+        self.create_line(w-5+offset, offset, w-5+offset, h-5+offset, fill="#333333", width=3)
+        self.create_line(offset, h-5+offset, w-5+offset, h-5+offset, fill="#333333", width=3)
+        self.create_text((w-5)//2+offset, (h-5)//2+offset, text=self.text, fill=self.fg, font=("Impact", 16))
 
     def on_press(self, event):
         self.dibujar_boton(offset=2)
@@ -138,27 +139,53 @@ class CopiadoraDeOficios:
         self.server = NetworkServer(port=self.puerto, callback=self.process_remote)
         self.server.start()
 
-    # --- MÉTODOS DE MOVIMIENTO DE VENTANA ---
-    def start_move(self, event):
-        self.x = event.x
-        self.y = event.y
+    def setup_ui(self):
+        header = tk.Frame(self.root, bg='#0047AB')
+        header.pack(fill='x', padx=10, pady=5)
 
-    def do_move(self, event):
-        x = self.root.winfo_x() + (event.x - self.x)
-        y = self.root.winfo_y() + (event.y - self.y)
-        self.root.geometry(f"+{x}+{y}")
+        tk.Button(header, text=" ⚙ ", bg='#002366', fg='cyan',
+                  font=("Arial", 12, "bold"), command=self.abrir_config,
+                  relief='flat').pack(side='left')
 
-    # (Aquí van todos tus métodos cmd_copia_directa, cmd_scan_arriba, cmd_scan_abajo, cmd_unir, cmd_preview, cmd_imprimir_oficio, abrir_config, _actualizar_configuracion, salir_limpio — los mantengo igual que en tu código original, solo asegurando que estén dentro de la clase.)
+        tk.Button(header, text=" X ", bg='#8B0000', fg='white',
+                  font=("Arial", 12, "bold"), command=self.salir_limpio,
+                  relief='flat').pack(side='right')
 
-    def salir_limpio(self):
+        tk.Label(self.root, text="COPIADORA DE OFICIOS",
+                 bg='#0047AB', fg='cyan', font=("Impact", 32)).pack(pady=10)
+
+        self.estado = IndicadorEstado(self.root)
+
+        self.btn_directa = BotonChingon(self.root, "COPIA DIRECTA", "#008000", self.cmd_copia_directa)
+        self.btn_directa.pack(pady=8)
+        self.btn_up = BotonChingon(self.root, "ESCANEAR ARRIBA", "#4169E1", self.cmd_scan_arriba)
+        self.btn_up.pack(pady=8)
+        self.btn_down = BotonChingon(self.root, "ESCANEAR ABAJO", "#4169E1", self.cmd_scan_abajo)
+        self.btn_down.pack(pady=8)
+        self.btn_unir = BotonChingon(self.root, "UNIR PARTES", "#FF8C00", self.cmd_unir)
+        self.btn_unir.pack(pady=8)
+        self.btn_preview = BotonChingon(self.root, "PREVISUALIZAR", "#FFFF00", self.cmd_preview)
+        self.btn_preview.pack(pady=8)
+        self.btn_print = BotonChingon(self.root, "IMPRIMIR OFICIO", "#008000", self.cmd_imprimir_oficio)
+        self.btn_print.pack(pady=8)
+
+        mode_frame = tk.Frame(self.root, bg='#0047AB')
+        mode_frame.pack(pady=12)
+
+        tk.Radiobutton(mode_frame, text="B/N", variable=self.modo_imagen, value="BN",
+                       bg='#0047AB', fg='white', font=("Impact", 12),
+                       selectcolor='#001a33', command=self.cambiar_modo).pack(side='left', padx=10)
+
+        tk.Radiobutton(mode_frame, text="COLOR", variable=self.modo_imagen, value="COLOR",
+                       bg='#0047AB', fg='white', font=("Impact", 12),
+                       selectcolor='#001a33', command=self.cambiar_modo).pack(side='left', padx=10)
+
+        tk.Checkbutton(self.root, text="MEJORAMIENTO DE IMAGEN", variable=self.mejoramiento_imagen,
+                       bg='#0047AB', fg='yellow', activebackground='#0047AB',
+                       activeforeground='yellow', selectcolor='#001a33',
+                       font=("Impact", 11), command=self.cambiar_mejoramiento).pack(pady=4)
+
+    def mostrar_estado(self, mensaje, color="#00FF00"):
         try:
-            self.server.stop()
-        except Exception:
-            pass
-        self.root.destroy()
-
-# --- BLOQUE PRINCIPAL ---
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = CopiadoraDeOficios(root)
-    root.mainloop()
+            self.root.after(0, lambda: self.estado.mostrar(mensaje, color))
+        except Exception
