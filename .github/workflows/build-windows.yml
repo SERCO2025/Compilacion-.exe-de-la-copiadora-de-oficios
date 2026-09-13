@@ -52,7 +52,7 @@ jobs:
         shell: cmd
         run: |
           set PYTHON_EXE=%LOCALAPPDATA%\Programs\Python\Python37-32\python.exe
-          "%PYTHON_EXE%" -m pip install numpy==1.21.6 opencv-python==4.5.5.64 Pillow==9.5.0 pywin32==306 pyinstaller==5.13.2
+          "%PYTHON_EXE%" -m pip install numpy==1.21.6 opencv-python==4.5.5.64 Pillow==9.5.0 pywin32==306 pytwain==2.2.2 pyinstaller==5.13.2
 
       - name: Verificar dependencias
         shell: cmd
@@ -62,6 +62,7 @@ jobs:
           "%PYTHON_EXE%" -c "import cv2; print('OpenCV:', cv2.__version__)"
           "%PYTHON_EXE%" -c "import PIL; print('Pillow:', PIL.__version__)"
           "%PYTHON_EXE%" -c "import win32api; print('pywin32: OK')"
+          "%PYTHON_EXE%" -c "import twain; print('pytwain: OK')"
           "%PYTHON_EXE%" -m PyInstaller --version
 
       - name: Comprobar archivos del proyecto
@@ -82,7 +83,7 @@ jobs:
         shell: cmd
         run: |
           set PYTHON_EXE=%LOCALAPPDATA%\Programs\Python\Python37-32\python.exe
-          "%PYTHON_EXE%" -m PyInstaller --noconfirm --clean --onefile --windowed --name CopiadoraDeOficios --icon copiadora.ico --add-data "config.json;." --paths . --hidden-import win32com.client --hidden-import pythoncom --hidden-import pywintypes --hidden-import win32api --hidden-import win32print --hidden-import win32ui --hidden-import win32con --hidden-import PIL.Image --hidden-import PIL.ImageWin main.py
+          "%PYTHON_EXE%" -m PyInstaller --noconfirm --clean --onefile --windowed --name CopiadoraDeOficios --icon copiadora.ico --add-data "config.json;." --paths . --hidden-import win32com.client --hidden-import pythoncom --hidden-import pywintypes --hidden-import win32api --hidden-import win32print --hidden-import win32ui --hidden-import win32con --hidden-import PIL.Image --hidden-import PIL.ImageWin --hidden-import twain main.py
 
       - name: Verificar EXE generado
         shell: powershell
