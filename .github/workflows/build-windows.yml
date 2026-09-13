@@ -54,6 +54,14 @@ jobs:
           set PYTHON_EXE=%LOCALAPPDATA%\Programs\Python\Python37-32\python.exe
           "%PYTHON_EXE%" -m pip install numpy==1.21.6 opencv-python==4.5.5.64 Pillow==9.5.0 pywin32==306 pytwain==2.2.2 pyinstaller==5.13.2
 
+      - name: Adaptar pytwain para Python 3.7
+        shell: cmd
+        run: |
+          set PYTHON_EXE=%LOCALAPPDATA%\Programs\Python\Python37-32\python.exe
+          "%PYTHON_EXE%" -c "import twain,os; root=os.path.dirname(twain.__file__); [open(os.path.join(dp,f),'r+',encoding='utf-8') for dp,_,fs in os.walk(root) for f in fs if f.endswith('.py')]; print('Ruta pytwain:',root)"
+          "%PYTHON_EXE%" -c "import twain,os; root=os.path.dirname(twain.__file__); files=[]; [files.append(os.path.join(dp,f)) for dp,_,fs in os.walk(root) for f in fs if f.endswith('.py')]; [open(f,'r+',encoding='utf-8').read() for f in files]; print('Archivos pytwain:',len(files))"
+          "%PYTHON_EXE%" -c "import twain,os; root=os.path.dirname(twain.__file__); files=[os.path.join(dp,f) for dp,_,fs in os.walk(root) for f in fs if f.endswith('.py')]; [(lambda p: (lambda s: (p.seek(0),p.write(s if s.startswith('from __future__ import annotations') else 'from __future__ import annotations\\n'+s),p.truncate(),p.close()))(p.read()))(open(f,'r+',encoding='utf-8')) for f in files]; print('Compatibilidad de anotaciones aplicada a pytwain')"
+
       - name: Verificar dependencias
         shell: cmd
         run: |
