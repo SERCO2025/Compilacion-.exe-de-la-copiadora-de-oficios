@@ -54,6 +54,20 @@ jobs:
           set PYTHON_EXE=%LOCALAPPDATA%\Programs\Python\Python37-32\python.exe
           "%PYTHON_EXE%" -m pip install numpy==1.21.6 opencv-python==4.5.5.64 Pillow==9.5.0 pywin32==306 pytwain==2.2.2 pyinstaller==5.13.2
 
+      - name: Adaptar pytwain para Python 3.7
+        shell: powershell
+        run: |
+          $python = "$env:LOCALAPPDATA\Programs\Python\Python37-32\python.exe"
+          & $python -c "import os,sysconfig; p=os.path.join(sysconfig.get_paths()['purelib'],'twain'); print('pytwain:',p); assert os.path.isdir(p)"
+          $twainPath = & $python -c "import os,sysconfig; print(os.path.join(sysconfig.get_paths()['purelib'],'twain'))"
+          Get-ChildItem -Path $twainPath -Recurse -Filter *.py | ForEach-Object {
+            $content = [System.IO.File]::ReadAllText($_.FullName)
+            if ($content -notmatch '(?m)^from __future__ import annotations\s*$') {
+              [System.IO.File]::WriteAllText($_.FullName, "from __future__ import annotations`r`n" + $content, [System.Text.UTF8Encoding]::new($false))
+            }
+          }
+          & $python -c "import twain; print('pytwain: OK - compatibilidad Python 3.7 aplicada')"
+
       - name: Verificar dependencias
         shell: cmd
         run: |
