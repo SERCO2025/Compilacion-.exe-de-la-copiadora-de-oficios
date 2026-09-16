@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Drinks 2 Base64</title>
+<style>body{font-family:monospace;margin:20px}#status{white-space:pre-wrap}#data{width:100%;min-height:70vh;box-sizing:border-box}</style>
+</head>
+<body>
+<h1>Drinks 2 Base64</h1>
+<div id="status">Cargando Drinks2_base64.txt...</div>
+<textarea id="data" readonly></textarea>
+<script>
+(async function(){
+  const status=document.getElementById('status');
+  const data=document.getElementById('data');
+  const candidates=[
+    'https://raw.githubusercontent.com/SERCO2025/Compilacion-.exe-de-la-copiadora-de-oficios/imagenzip/Drinks2_base64.txt',
+    './Drinks2_base64.txt'
+  ];
+  let lastError;
+  for(const url of candidates){
+    try{
+      const r=await fetch(url,{cache:'no-store'});
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      const text=await r.text();
+      if(!text || !text.trim()) throw new Error('La respuesta llegó vacía');
+      data.value=text;
+      status.textContent='OK: Base64 cargado. Caracteres: '+text.length;
+      return;
+    }catch(e){lastError=e;}
+  }
+  status.textContent='ERROR: no se pudo cargar Drinks2_base64.txt. '+lastError;
+})();
+</script>
+</body>
+</html>
