@@ -47,12 +47,12 @@ class ConfigWindow:
             width=40
         )
 
-        self.cb_scan1.set(
-            self.config.config_data.get(
-                "scanner1",
-                ""
-            )
-        )
+        scanner1 = self.config.config_data.get("scanner1", "")
+        if scanner1:
+            self.cb_scan1.set(scanner1)
+        else:
+            self.cb_scan1.set("")
+            self.cb_scan1.current(-1)
 
         self.cb_scan1.pack(
             pady=5
@@ -73,12 +73,12 @@ class ConfigWindow:
             width=40
         )
 
-        self.cb_scan2.set(
-            self.config.config_data.get(
-                "scanner2",
-                ""
-            )
-        )
+        scanner2 = self.config.config_data.get("scanner2", "")
+        if scanner2:
+            self.cb_scan2.set(scanner2)
+        else:
+            self.cb_scan2.set("")
+            self.cb_scan2.current(-1)
 
         self.cb_scan2.pack(
             pady=5
@@ -99,12 +99,12 @@ class ConfigWindow:
             width=40
         )
 
-        self.cb_print.set(
-            self.config.config_data.get(
-                "impresora",
-                ""
-            )
-        )
+        impresora = self.config.config_data.get("impresora", "")
+        if impresora:
+            self.cb_print.set(impresora)
+        else:
+            self.cb_print.set("")
+            self.cb_print.current(-1)
 
         self.cb_print.pack(
             pady=5
