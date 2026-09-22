@@ -42,23 +42,24 @@ class ScannerManager:
         }
 
     def _twain_dsm_path(self):
-        """Obtiene el TWAIN DSM 32-bit que acompaña al EXE."""
-        if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-            base_path = sys._MEIPASS
-        else:
-            base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        return os.path.join(base_path, "TWAINDSM.dll")
+        """Obtiene el DSM TWAIN 1.x de Windows para aplicaciones de 32 bits."""
+        windir = os.environ.get("WINDIR", r"C:\Windows")
+        return os.path.join(windir, "twain_32.dll")
 
     def _create_twain_source_manager(self):
-        """Crea pytwain usando explícitamente nuestro DSM TWAIN 32-bit."""
+        """Crea pytwain usando el DSM TWAIN 32-bit nativo de Windows."""
         if not TWAIN_AVAILABLE:
             return None
 
         dsm_path = self._twain_dsm_path()
         if not os.path.exists(dsm_path):
-            raise RuntimeError("No se encontró TWAINDSM.dll en: {}".format(dsm_path))
+            raise RuntimeError(
+                "No se encontró el DSM TWAIN de Windows en: {}".format(dsm_path)
+            )
 
-        return twain.SourceManager(0, ProtocolMajor=2, dsm_name=dsm_path)
+        # Los drivers TWAIN instalados en C:\Windows\twain_32
+        # normalmente trabajan con TWAIN 1.x.
+        return twain.SourceManager(0, ProtocolMajor=1, dsm_name=dsm_path)
 
     def _list_wia_scanners(self):
         """Enumera los escáneres disponibles mediante WIA."""
