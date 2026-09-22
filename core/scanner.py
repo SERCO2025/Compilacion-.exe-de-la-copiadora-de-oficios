@@ -237,7 +237,7 @@ class ScannerManager:
         )
 
         try:
-            with twain.SourceManager(0) as source_manager:
+            with self._create_twain_source_manager() as source_manager:
                 source = source_manager.open_source(source_name)
 
                 if source is None:
