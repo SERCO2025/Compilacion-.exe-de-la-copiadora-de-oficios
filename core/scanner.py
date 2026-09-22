@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
+import sys
 import time
 import uuid
 
@@ -39,6 +40,25 @@ class ScannerManager:
             "protocol": protocol,
             "identifier": identifier,
         }
+
+    def _twain_dsm_path(self):
+        """Obtiene el TWAIN DSM 32-bit que acompaña al EXE."""
+        if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+            base_path = sys._MEIPASS
+        else:
+            base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        return os.path.join(base_path, "TWAINDSM.dll")
+
+    def _create_twain_source_manager(self):
+        """Crea pytwain usando explícitamente nuestro DSM TWAIN 32-bit."""
+        if not TWAIN_AVAILABLE:
+            return None
+
+        dsm_path = self._twain_dsm_path()
+        if not os.path.exists(dsm_path):
+            raise RuntimeError("No se encontró TWAINDSM.dll en: {}".format(dsm_path))
+
+        return twain.SourceManager(0, ProtocolMajor=2, dsm_name=dsm_path)
 
     def _list_wia_scanners(self):
         """Enumera los escáneres disponibles mediante WIA."""
@@ -86,14 +106,13 @@ class ScannerManager:
         try:
             # 0 evita depender de Tkinter y permite que esta función sea llamada
             # desde el hilo que actualiza la configuración.
-            with twain.SourceManager(0) as source_manager:
+            with self._create_twain_source_manager() as source_manager:
                 for source_name in source_manager.source_list:
                     name = str(source_name)
                     if name:
                         sources.append(name)
-        except Exception:
-            # TWAIN puede no tener DSM compatible, no tener fuentes instaladas
-            # o no poder cargar el controlador. Eso no debe inutilizar WIA.
+        except Exception as e:
+            print("Error TWAIN al enumerar fuentes: {}".format(e))
             return []
 
         return sources
