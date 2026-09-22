@@ -345,9 +345,33 @@ class ScannerManager:
         identifier = scanner_info["identifier"]
 
         if protocol == "WIA":
-            return self._scan_wia(identifier, output_path, dpi)
+            # Algunos Epson aparecen primero como WIA aunque el controlador
+            # que realmente permite adquirir la imagen sea TWAIN.
+            # Si WIA falla, probamos automáticamente la fuente TWAIN con
+            # el mismo nombre antes de informar un fallo de escaneo.
+            wia_ok, wia_msg = self._scan_wia(identifier, output_path, dpi)
+            if wia_ok:
+                return True, wia_msg
+
+            if TWAIN_AVAILABLE:
+                twain_names = self._list_twain_scanners()
+                for twain_name in twain_names:
+                    if twain_name == scanner_name or twain_name == identifier:
+                        twain_ok, twain_msg = self._scan_twain(
+                            twain_name,
+                            output_path,
+                            dpi
+                        )
+                        if twain_ok:
+                            return True, twain_msg
+                        return False, "WIA: {}; TWAIN: {}".format(
+                            wia_msg,
+                            twain_msg
+                        )
+
+            return False, "WIA: {}".format(wia_msg)
 
         if protocol == "TWAIN":
-            return self._scan_twain(identifier, output_path)
+            return self._scan_twain(identifier, output_path, dpi)
 
         return False, "Protocolo de scanner no reconocido"
