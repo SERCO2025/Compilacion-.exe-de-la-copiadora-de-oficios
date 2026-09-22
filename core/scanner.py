@@ -223,8 +223,8 @@ class ScannerManager:
                     pass
             pythoncom.CoUninitialize()
 
-    def _scan_twain(self, source_name, output_path):
-        """Realiza un escaneo usando una fuente TWAIN."""
+    def _scan_twain(self, source_name, output_path, dpi=300):
+        """Realiza un escaneo TWAIN usando el ciclo de mensajes de pytwain."""
         if not TWAIN_AVAILABLE:
             return False, "TWAIN no está disponible en este equipo"
 
@@ -244,17 +244,49 @@ class ScannerManager:
                     return False, "Fuente TWAIN no encontrada"
 
                 try:
-                    source.request_acquire(show_ui=False, modal_ui=False)
-                    transfer = source.xfer_image_natively()
+                    # IMPORTANTE:
+                    # request_acquire() solamente habilita la fuente.
+                    # Después debe ejecutarse el modal/message loop de TWAIN
+                    # para recibir MSG_XFERREADY. Hacer xfer_image_natively()
+                    # inmediatamente provoca que algunos drivers Epson no
+                    # lleguen nunca al estado de transferencia.
+                    try:
+                        source.set_capability(
+                            twain.ICAP_XRESOLUTION,
+                            twain.TWTY_FIX32,
+                            dpi,
+                        )
+                        source.set_capability(
+                            twain.ICAP_YRESOLUTION,
+                            twain.TWTY_FIX32,
+                            dpi,
+                        )
+                    except Exception:
+                        # Algunos drivers no permiten modificar la resolución
+                        # antes de habilitarse. Se conserva la resolución del
+                        # driver en ese caso.
+                        pass
 
-                    if not transfer:
+                    transfer_result = []
+
+                    def on_image(image, remaining_count):
+                        image.save(temp_bmp)
+                        transfer_result.append(True)
+
+                        # Solo necesitamos una hoja. Si el alimentador/source
+                        # anuncia más imágenes, cancelamos las restantes.
+                        if remaining_count:
+                            raise twain.CancelAll()
+
+                    source.acquire_natively(
+                        after=on_image,
+                        show_ui=False,
+                        modal=False,
+                    )
+
+                    if not transfer_result or not os.path.exists(temp_bmp):
                         return False, "TWAIN no devolvió una imagen"
 
-                    handle, remaining_count = transfer
-                    twain.dib_to_bm_file(handle, temp_bmp)
-
-                    # Convertimos el BMP nativo de TWAIN al formato solicitado
-                    # por la aplicación, conservando la salida habitual.
                     with Image.open(temp_bmp) as image:
                         image.load()
                         image.save(output_path)
