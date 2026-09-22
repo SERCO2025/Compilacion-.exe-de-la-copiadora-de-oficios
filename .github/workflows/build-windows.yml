@@ -68,6 +68,28 @@ jobs:
           }
           & $python -c "import twain; print('pytwain: OK - compatibilidad Python 3.7 aplicada')"
 
+      - name: Descargar TWAIN DSM 32 bits
+        shell: powershell
+        run: |
+          $url = "https://github.com/twain/twain-dsm/releases/download/v2.5.1/dsm_020501.zip"
+          $zip = "$env:RUNNER_TEMP\twain-dsm.zip"
+          $extract = "$env:RUNNER_TEMP\twain-dsm"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          if (Test-Path $extract) { Remove-Item -Recurse -Force $extract }
+          Expand-Archive -Path $zip -DestinationPath $extract -Force
+
+          $dll = Get-ChildItem -Path $extract -Recurse -Filter TWAINDSM.dll |
+            Where-Object { $_.FullName -match '\\(32|x86|win32)\\' } |
+            Select-Object -First 1
+
+          if ($null -eq $dll) {
+            $dll = Get-ChildItem -Path $extract -Recurse -Filter TWAINDSM.dll | Select-Object -First 1
+          }
+
+          if ($null -eq $dll) { exit 1 }
+
+          Copy-Item $dll.FullName "TWAINDSM.dll" -Force
+          Write-Host "TWAIN DSM seleccionado: $($dll.FullName)"
       - name: Verificar dependencias
         shell: cmd
         run: |
@@ -82,7 +104,7 @@ jobs:
       - name: Comprobar archivos del proyecto
         shell: powershell
         run: |
-          $requiredFiles = @("main.py","config.json","copiadora.ico","core\scanner.py","core\printer.py","core\image_processor.py","core\config_manager.py","core\network.py","ui\config_window.py")
+          $requiredFiles = @("main.py","config.json","copiadora.ico","TWAINDSM.dll","core\scanner.py","core\printer.py","core\image_processor.py","core\config_manager.py","core\network.py","ui\config_window.py")
           foreach ($file in $requiredFiles) {
             if (!(Test-Path $file)) { exit 1 }
           }
@@ -97,7 +119,7 @@ jobs:
         shell: cmd
         run: |
           set PYTHON_EXE=%LOCALAPPDATA%\Programs\Python\Python37-32\python.exe
-          "%PYTHON_EXE%" -m PyInstaller --noconfirm --clean --onefile --windowed --name CopiadoraDeOficios --icon copiadora.ico --add-data "config.json;." --paths . --hidden-import win32com.client --hidden-import pythoncom --hidden-import pywintypes --hidden-import win32api --hidden-import win32print --hidden-import win32ui --hidden-import win32con --hidden-import PIL.Image --hidden-import PIL.ImageWin --hidden-import twain main.py
+          "%PYTHON_EXE%" -m PyInstaller --noconfirm --clean --onefile --windowed --name CopiadoraDeOficios --icon copiadora.ico --add-data "config.json;." --add-binary "TWAINDSM.dll;." --paths . --hidden-import win32com.client --hidden-import pythoncom --hidden-import pywintypes --hidden-import win32api --hidden-import win32print --hidden-import win32ui --hidden-import win32con --hidden-import PIL.Image --hidden-import PIL.ImageWin --hidden-import twain main.py
 
       - name: Verificar EXE generado
         shell: powershell
