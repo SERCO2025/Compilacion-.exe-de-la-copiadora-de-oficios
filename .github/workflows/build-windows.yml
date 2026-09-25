@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - fix/scanner-detection
 
 permissions:
   contents: read
