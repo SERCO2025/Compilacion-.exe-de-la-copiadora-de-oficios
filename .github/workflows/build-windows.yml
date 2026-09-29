@@ -134,10 +134,66 @@ jobs:
           Copy-Item "dist\CopiadoraDeOficios.exe" "release\CopiadoraDeOficios.exe"
           Copy-Item "config.json" "release\config.json"
 
-      - name: Publicar EXE
-        uses: actions/upload-artifact@v4
+      - name: Calcular compilación antigua a eliminar
+        id: retention
+        shell: powershell
+        run: |
+          $runNumber = [int]$env:GITHUB_RUN_NUMBER
+          if ($runNumber -gt 10) {
+            $oldRun = $runNumber - 10
+            "old_run=$oldRun" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Subir EXE a Backblaze B2
+        uses: backblaze-labs/b2-action@v1
         with:
-          name: CopiadoraDeOficios-Windows-x86
-          path: release/
-          if-no-files-found: error
-          retention-days: 30
+          action: upload
+          application-key-id: ${{ secrets.B2_APPLICATION_KEY_ID }}
+          application-key: ${{ secrets.B2_APPLICATION_KEY }}
+          bucket: copiadora-oficios
+          source: release/CopiadoraDeOficios.exe
+          destination: Copiadora EXE/${{ github.run_number }}/CopiadoraDeOficios.exe
+
+      - name: Subir configuración a Backblaze B2
+        uses: backblaze-labs/b2-action@v1
+        with:
+          action: upload
+          application-key-id: ${{ secrets.B2_APPLICATION_KEY_ID }}
+          application-key: ${{ secrets.B2_APPLICATION_KEY }}
+          bucket: copiadora-oficios
+          source: release/config.json
+          destination: Copiadora EXE/${{ github.run_number }}/config.json
+
+      - name: Generar enlace temporal de descarga
+        id: download-link
+        uses: backblaze-labs/b2-action@v1
+        with:
+          action: presign
+          application-key-id: ${{ secrets.B2_APPLICATION_KEY_ID }}
+          application-key: ${{ secrets.B2_APPLICATION_KEY }}
+          bucket: copiadora-oficios
+          source: Copiadora EXE/${{ github.run_number }}/CopiadoraDeOficios.exe
+          presign-ttl: 604800
+
+      - name: Mostrar enlace de descarga
+        shell: powershell
+        env:
+          DOWNLOAD_URL: ${{ steps.download-link.outputs.presigned-url }}
+        run: |
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "## Copiadora de Oficios - Windows"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "Compilación: **${{ github.run_number }}**"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "[Descargar CopiadoraDeOficios.exe]($env:DOWNLOAD_URL)"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "Los archivos están almacenados en Backblaze B2."
+
+      - name: Eliminar compilación anterior al límite de 10
+        if: ${{ github.run_number > 10 }}
+        uses: backblaze-labs/b2-action@v1
+        with:
+          action: delete
+          application-key-id: ${{ secrets.B2_APPLICATION_KEY_ID }}
+          application-key: ${{ secrets.B2_APPLICATION_KEY }}
+          bucket: copiadora-oficios
+          source: Copiadora EXE/${{ steps.retention.outputs.old_run }}/
