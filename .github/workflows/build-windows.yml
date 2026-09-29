@@ -154,14 +154,6 @@ jobs:
           source: release/CopiadoraDeOficios.exe
           destination: Copiadora EXE/${{ github.run_number }}/CopiadoraDeOficios.exe
 
-      - name: Publicar EXE como artefacto de GitHub
-        uses: actions/upload-artifact@v4
-        with:
-          name: CopiadoraDeOficios-${{ github.run_number }}
-          path: release/CopiadoraDeOficios.exe
-          retention-days: 7
-          compression-level: 0
-
       - name: Subir configuración a Backblaze B2
         uses: backblaze-labs/b2-action@v1
         with:
@@ -172,17 +164,13 @@ jobs:
           source: release/config.json
           destination: Copiadora EXE/${{ github.run_number }}/config.json
 
-      - name: Generar enlace temporal de descarga
+      - name: Generar enlace temporal de descarga desde Backblaze
         id: download-link
         shell: powershell
         env:
           B2_KEY_ID: ${{ secrets.B2_APPLICATION_KEY_ID }}
           B2_APP_KEY: ${{ secrets.B2_APPLICATION_KEY }}
         run: |
-          $bucketName = "copiadora-oficios"
-          $fileName = "Copiadora EXE/${{ github.run_number }}/CopiadoraDeOficios.exe"
-          $ttl = 604800
-
           $basicBytes = [System.Text.Encoding]::ASCII.GetBytes("$env:B2_KEY_ID`:$env:B2_APP_KEY")
           $basic = [Convert]::ToBase64String($basicBytes)
 
@@ -191,33 +179,25 @@ jobs:
             -Uri "https://api.backblazeb2.com/b2api/v4/b2_authorize_account" `
             -Headers @{ Authorization = "Basic $basic" }
 
-          $apiUrl = $auth.apiInfo.storageApi.apiUrl
-          $downloadUrl = $auth.apiInfo.storageApi.downloadUrl
-          $bucketId = $auth.apiInfo.storageApi.allowed.buckets[0].id
-
-          if ([string]::IsNullOrWhiteSpace($bucketId)) {
-            throw "No se pudo obtener el bucketId de Backblaze B2."
+          $s3Endpoint = $auth.apiInfo.storageApi.s3ApiUrl
+          if ([string]::IsNullOrWhiteSpace($s3Endpoint)) {
+            throw "Backblaze no devolvió el endpoint S3."
           }
 
-          if ($auth.apiInfo.storageApi.allowed.capabilities -notcontains "shareFiles") {
-            throw "La Application Key de B2 no tiene la capacidad shareFiles necesaria para generar el enlace de descarga."
+          $endpointHost = ([Uri]$s3Endpoint).Host
+          if ($endpointHost -notmatch '^s3\.([^.]+)\.backblazeb2\.com$') {
+            throw "No se pudo determinar la región S3 desde el endpoint de Backblaze: $s3Endpoint"
           }
 
-          $body = @{
-            bucketId = $bucketId
-            fileNamePrefix = $fileName
-            validDurationInSeconds = $ttl
-          } | ConvertTo-Json
+          $region = $Matches[1]
+          $objectKey = "Copiadora EXE/${{ github.run_number }}/CopiadoraDeOficios.exe"
+          $expires = 604800
 
-          $downloadAuth = Invoke-RestMethod `
-            -Method Post `
-            -Uri "$apiUrl/b2api/v4/b2_get_download_authorization" `
-            -Headers @{ Authorization = $auth.authorizationToken } `
-            -ContentType "application/json" `
-            -Body $body
-
-          $encodedFileName = (($fileName -split "/") | ForEach-Object { [Uri]::EscapeDataString($_) }) -join "/"
-          $url = "$downloadUrl/file/$bucketName/$encodedFileName`?Authorization=$([Uri]::EscapeDataString($downloadAuth.authorizationToken))"
+          aws --version
+          $url = aws s3 presign "s3://copiadora-oficios/$objectKey" --endpoint-url $s3Endpoint --region $region --expires-in $expires
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($url)) {
+            throw "No se pudo generar el enlace presignado de Backblaze B2."
+          }
 
           "download-url=$url" >> $env:GITHUB_OUTPUT
 
@@ -225,9 +205,9 @@ jobs:
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "Compilación: **${{ github.run_number }}**"
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "[ABRIR DESCARGA DEL EXE EN GITHUB](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "[DESCARGAR EXE]($url)"
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "El EXE principal está disponible en la sección **Artifacts** de esta ejecución. Backblaze B2 continúa siendo el almacenamiento de las compilaciones."
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "El archivo está almacenado únicamente en Backblaze B2. El enlace es temporal (7 días)."
       - name: Eliminar compilación anterior al límite de 10
         if: ${{ github.run_number > 10 }}
         uses: backblaze-labs/b2-action@v1
