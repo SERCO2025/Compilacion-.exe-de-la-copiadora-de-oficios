@@ -154,6 +154,14 @@ jobs:
           source: release/CopiadoraDeOficios.exe
           destination: Copiadora EXE/${{ github.run_number }}/CopiadoraDeOficios.exe
 
+      - name: Publicar EXE como artefacto de GitHub
+        uses: actions/upload-artifact@v4
+        with:
+          name: CopiadoraDeOficios-${{ github.run_number }}
+          path: release/CopiadoraDeOficios.exe
+          retention-days: 7
+          compression-level: 0
+
       - name: Subir configuración a Backblaze B2
         uses: backblaze-labs/b2-action@v1
         with:
@@ -217,9 +225,9 @@ jobs:
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "Compilación: **${{ github.run_number }}**"
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "[Descargar CopiadoraDeOficios.exe]($url)"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "[ABRIR DESCARGA DEL EXE EN GITHUB](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "El EXE y config.json están almacenados en Backblaze B2. El enlace de descarga es temporal y dura 7 días."
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "El EXE principal está disponible en la sección **Artifacts** de esta ejecución. Backblaze B2 continúa siendo el almacenamiento de las compilaciones."
       - name: Eliminar compilación anterior al límite de 10
         if: ${{ github.run_number > 10 }}
         uses: backblaze-labs/b2-action@v1
