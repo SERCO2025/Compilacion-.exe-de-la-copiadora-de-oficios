@@ -166,28 +166,60 @@ jobs:
 
       - name: Generar enlace temporal de descarga
         id: download-link
-        uses: backblaze-labs/b2-action@v1
-        with:
-          action: presign
-          application-key-id: ${{ secrets.B2_APPLICATION_KEY_ID }}
-          application-key: ${{ secrets.B2_APPLICATION_KEY }}
-          bucket: copiadora-oficios
-          source: Copiadora EXE/${{ github.run_number }}/CopiadoraDeOficios.exe
-          presign-ttl: 604800
-
-      - name: Mostrar enlace de descarga
         shell: powershell
         env:
-          DOWNLOAD_URL: ${{ steps.download-link.outputs.presigned-url }}
+          B2_KEY_ID: ${{ secrets.B2_APPLICATION_KEY_ID }}
+          B2_APP_KEY: ${{ secrets.B2_APPLICATION_KEY }}
         run: |
+          $bucketName = "copiadora-oficios"
+          $fileName = "Copiadora EXE/${{ github.run_number }}/CopiadoraDeOficios.exe"
+          $ttl = 604800
+
+          $basicBytes = [System.Text.Encoding]::ASCII.GetBytes("$env:B2_KEY_ID`:$env:B2_APP_KEY")
+          $basic = [Convert]::ToBase64String($basicBytes)
+
+          $auth = Invoke-RestMethod `
+            -Method Get `
+            -Uri "https://api.backblazeb2.com/b2api/v4/b2_authorize_account" `
+            -Headers @{ Authorization = "Basic $basic" }
+
+          $apiUrl = $auth.apiInfo.storageApi.apiUrl
+          $downloadUrl = $auth.apiInfo.storageApi.downloadUrl
+          $bucketId = $auth.apiInfo.storageApi.allowed.buckets[0].id
+
+          if ([string]::IsNullOrWhiteSpace($bucketId)) {
+            throw "No se pudo obtener el bucketId de Backblaze B2."
+          }
+
+          if ($auth.apiInfo.storageApi.allowed.capabilities -notcontains "shareFiles") {
+            throw "La Application Key de B2 no tiene la capacidad shareFiles necesaria para generar el enlace de descarga."
+          }
+
+          $body = @{
+            bucketId = $bucketId
+            fileNamePrefix = $fileName
+            validDurationInSeconds = $ttl
+          } | ConvertTo-Json
+
+          $downloadAuth = Invoke-RestMethod `
+            -Method Post `
+            -Uri "$apiUrl/b2api/v4/b2_get_download_authorization" `
+            -Headers @{ Authorization = $auth.authorizationToken } `
+            -ContentType "application/json" `
+            -Body $body
+
+          $encodedFileName = (($fileName -split "/") | ForEach-Object { [Uri]::EscapeDataString($_) }) -join "/"
+          $url = "$downloadUrl/file/$bucketName/$encodedFileName`?Authorization=$([Uri]::EscapeDataString($downloadAuth.authorizationToken))"
+
+          "download-url=$url" >> $env:GITHUB_OUTPUT
+
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "## Copiadora de Oficios - Windows"
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "Compilación: **${{ github.run_number }}**"
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "[Descargar CopiadoraDeOficios.exe]($env:DOWNLOAD_URL)"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "[Descargar CopiadoraDeOficios.exe]($url)"
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "Los archivos están almacenados en Backblaze B2."
-
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "El EXE y config.json están almacenados en Backblaze B2. El enlace de descarga es temporal y dura 7 días."
       - name: Eliminar compilación anterior al límite de 10
         if: ${{ github.run_number > 10 }}
         uses: backblaze-labs/b2-action@v1
