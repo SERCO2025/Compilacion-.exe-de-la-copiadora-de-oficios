@@ -164,50 +164,19 @@ jobs:
           source: release/config.json
           destination: Copiadora EXE/${{ github.run_number }}/config.json
 
-      - name: Generar enlace temporal de descarga desde Backblaze
-        id: download-link
+      - name: Mostrar información de acceso a Backblaze
         shell: powershell
-        env:
-          B2_KEY_ID: ${{ secrets.B2_APPLICATION_KEY_ID }}
-          B2_APP_KEY: ${{ secrets.B2_APPLICATION_KEY }}
         run: |
-          $basicBytes = [System.Text.Encoding]::ASCII.GetBytes("$env:B2_KEY_ID`:$env:B2_APP_KEY")
-          $basic = [Convert]::ToBase64String($basicBytes)
-
-          $auth = Invoke-RestMethod `
-            -Method Get `
-            -Uri "https://api.backblazeb2.com/b2api/v4/b2_authorize_account" `
-            -Headers @{ Authorization = "Basic $basic" }
-
-          $s3Endpoint = $auth.apiInfo.storageApi.s3ApiUrl
-          if ([string]::IsNullOrWhiteSpace($s3Endpoint)) {
-            throw "Backblaze no devolvió el endpoint S3."
-          }
-
-          $endpointHost = ([Uri]$s3Endpoint).Host
-          if ($endpointHost -notmatch '^s3\.([^.]+)\.backblazeb2\.com$') {
-            throw "No se pudo determinar la región S3 desde el endpoint de Backblaze: $s3Endpoint"
-          }
-
-          $region = $Matches[1]
-          $objectKey = "Copiadora EXE/${{ github.run_number }}/CopiadoraDeOficios.exe"
-          $expires = 604800
-
-          aws --version
-          $url = aws s3 presign "s3://copiadora-oficios/$objectKey" --endpoint-url $s3Endpoint --region $region --expires-in $expires
-          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($url)) {
-            throw "No se pudo generar el enlace presignado de Backblaze B2."
-          }
-
-          "download-url=$url" >> $env:GITHUB_OUTPUT
-
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "## Copiadora de Oficios - Windows"
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "Compilación: **${{ github.run_number }}**"
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "[DESCARGAR EXE]($url)"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "Busca el archivo en Backblaze:"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "[Abrir Backblaze B2](https://secure.backblaze.com/b2_buckets.htm)"
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "El archivo está almacenado únicamente en Backblaze B2. El enlace es temporal (7 días)."
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "Usuario: **cerco.mxli@gmail.com**"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "La contraseña no se publica en el resumen de GitHub Actions."
       - name: Eliminar compilación anterior al límite de 10
         if: ${{ github.run_number > 10 }}
         uses: backblaze-labs/b2-action@v1
