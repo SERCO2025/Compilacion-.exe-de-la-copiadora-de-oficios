@@ -169,16 +169,6 @@ jobs:
           Copy-Item "dist\CopiadoraDeOficios.exe" "release\CopiadoraDeOficios.exe"
           Copy-Item "config.json" "release\config.json"
 
-      - name: Calcular compilación antigua a eliminar
-        id: retention
-        shell: powershell
-        run: |
-          $runNumber = [int]$env:GITHUB_RUN_NUMBER
-          if ($runNumber -gt 10) {
-            $oldRun = $runNumber - 10
-            "old_run=$oldRun" >> $env:GITHUB_OUTPUT
-          }
-
       - name: Subir EXE a Backblaze B2
         uses: backblaze-labs/b2-action@v1
         with:
@@ -207,12 +197,3 @@ jobs:
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "Busca el archivo en Backblaze"
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "https://secure.backblaze.com/b2_buckets.htm"
 
-      - name: Eliminar compilación anterior al límite de 10
-        if: ${{ github.run_number > 10 }}
-        uses: backblaze-labs/b2-action@v1
-        with:
-          action: delete
-          application-key-id: ${{ secrets.B2_APPLICATION_KEY_ID }}
-          application-key: ${{ secrets.B2_APPLICATION_KEY }}
-          bucket: copiadora-oficios
-          source: Copiadora EXE/${{ steps.retention.outputs.old_run }}/
