@@ -8,17 +8,20 @@ from PIL import Image
 
 def _estimar_desplazamiento_vertical(img_a, img_b):
     """
-    Estima la relación vertical entre las dos capturas.
+    Registra la captura inferior respecto de la captura superior.
 
-    El valor devuelto representa en qué fila de A se encuentra la fila 0 de B.
-    Ejemplo: si devuelve 624, B[0] corresponde aproximadamente a A[624].
-
-    Se trabaja exclusivamente con copias auxiliares en escala de grises.
-    Las imágenes originales a color nunca se modifican.
+    A es la referencia fija. La función calcula cuánto debe desplazarse B
+    para que sus características coincidentes queden registradas sobre A.
 
     Devuelve:
-        (offset_y, confianza, cantidad_inliers)
-        o (None, 0.0, 0) si no existe evidencia suficiente.
+        (offset_x, offset_y, confianza, cantidad_inliers)
+        donde B debe colocarse en:
+            x_B = x_A + offset_x
+            y_B = y_A + offset_y
+
+        o:
+        (None, None, 0.0, 0)
+        si no existe evidencia suficiente.
     """
     gris_a = cv2.cvtColor(img_a, cv2.COLOR_BGR2GRAY)
     gris_b = cv2.cvtColor(img_b, cv2.COLOR_BGR2GRAY)
@@ -27,15 +30,16 @@ def _estimar_desplazamiento_vertical(img_a, img_b):
     gris_b = cv2.medianBlur(gris_b, 3)
 
     try:
-        # SIFT permite localizar la misma información aun cuando las dos
-        # capturas corresponden a posiciones distintas del mismo documento.
+        # SIFT localiza la misma información en ambas capturas. El registro
+        # se calcula sobre copias en escala de grises; las imágenes a color
+        # permanecen intactas.
         if hasattr(cv2, "SIFT_create"):
             detector = cv2.SIFT_create(nfeatures=6000)
             kp_a, des_a = detector.detectAndCompute(gris_a, None)
             kp_b, des_b = detector.detectAndCompute(gris_b, None)
 
             if des_a is None or des_b is None or len(kp_a) < 8 or len(kp_b) < 8:
-                return None, 0.0, 0
+                return None, None, 0.0, 0
 
             matcher = cv2.BFMatcher(cv2.NORM_L2)
             pares = matcher.knnMatch(des_a, des_b, k=2)
@@ -49,17 +53,13 @@ def _estimar_desplazamiento_vertical(img_a, img_b):
                     buenos.append(m)
 
             if len(buenos) < 8:
-                return None, 0.0, 0
+                return None, None, 0.0, 0
 
             puntos_a = np.float32([kp_a[m.queryIdx].pt for m in buenos])
             puntos_b = np.float32([kp_b[m.trainIdx].pt for m in buenos])
 
-            # B = A + desplazamiento. Para una captura inferior, el
-            # desplazamiento vertical suele ser negativo; por eso el offset
-            # solicitado por esta función es -dy.
             desplazamientos = puntos_b - puntos_a
 
-            # Filtrado inicial por mediana para eliminar coincidencias absurdas.
             med_dx = float(np.median(desplazamientos[:, 0]))
             med_dy = float(np.median(desplazamientos[:, 1]))
 
@@ -70,13 +70,14 @@ def _estimar_desplazamiento_vertical(img_a, img_b):
             mascara_inicial = desviacion <= 12.0
 
             if int(np.count_nonzero(mascara_inicial)) < 8:
-                return None, 0.0, 0
+                return None, None, 0.0, 0
 
             pa = puntos_a[mascara_inicial]
             pb = puntos_b[mascara_inicial]
 
-            # RANSAC para obtener la traslación dominante y descartar
-            # coincidencias aisladas.
+            # RANSAC obtiene la relación dominante y descarta coincidencias
+            # aisladas. Se utiliza para calcular el registro; la composición
+            # final aplica únicamente la traslación resultante.
             matriz, mascara = cv2.estimateAffinePartial2D(
                 pa,
                 pb,
@@ -88,23 +89,21 @@ def _estimar_desplazamiento_vertical(img_a, img_b):
             )
 
             if matriz is None or mascara is None:
-                return None, 0.0, 0
+                return None, None, 0.0, 0
 
             mascara = mascara.ravel().astype(bool)
             inliers = int(np.count_nonzero(mascara))
             if inliers < 8:
-                return None, 0.0, inliers
+                return None, None, 0.0, inliers
 
             dx = float(matriz[0, 2])
             dy = float(matriz[1, 2])
 
-            # La captura debe coincidir horizontalmente. Una desviación
-            # importante indica que no estamos ante las dos partes del mismo
-            # escaneo.
+            # Una diferencia horizontal grande no corresponde a las dos
+            # partes del mismo documento.
             if abs(dx) > 25.0:
-                return None, 0.0, inliers
+                return None, None, 0.0, inliers
 
-            # Medimos la consistencia del desplazamiento entre inliers.
             pa_i = pa[mascara]
             pb_i = pb[mascara]
             residuos = pb_i - pa_i
@@ -117,39 +116,37 @@ def _estimar_desplazamiento_vertical(img_a, img_b):
             confianza = max(0.0, min(1.0, 1.0 - error_mediano / 5.0))
             confianza *= min(1.0, inliers / 40.0)
 
+            # La matriz lleva A -> B. Para colocar B sobre la referencia A
+            # se aplica el desplazamiento inverso.
+            offset_x = int(round(-dx))
             offset_y = int(round(-dy))
-            return offset_y, confianza, inliers
+
+            return offset_x, offset_y, confianza, inliers
 
     except Exception as e:
-        print(f"SISTEMA: No fue posible estimar el desplazamiento por características: {e}")
+        print(
+            f"SISTEMA: No fue posible estimar el registro por características: {e}"
+        )
 
-    return None, 0.0, 0
+    return None, None, 0.0, 0
 
 
 def _recortar_y_componer(img_a, img_b, dpi_original=300):
     """
-    Construye el documento Oficio conservando las imágenes originales.
+    Construye el documento Oficio mediante registro y fusión de las dos capturas.
 
     Reglas geométricas:
-    - A: se elimina 1 pulgada de su extremo inferior.
-    - B: se elimina 1 pulgada de su extremo superior.
-    - La relación vertical entre A y B se obtiene con una copia auxiliar en
-      escala de grises.
-    - B limpia comienza físicamente en la coordenada:
-          offset_y + recorte
-      respecto de A.
-    - Si el documento estimado es menor que Oficio, se conserva completo y el
-      espacio restante del lienzo queda blanco.
-    - Si el documento estimado coincide con Oficio, se ocupa exactamente el
-      lienzo.
-    - Si excede ligeramente el lienzo por una diferencia de registro pequeña,
-      la corrección se reparte entre los extremos exteriores. Esto reproduce
-      el caso real de referencia: 24 px de diferencia => 12 px por extremo.
-    - Si la discrepancia supera el margen de registro permitido, se rechaza en
-      lugar de recortar contenido real.
-    - Si no existe información suficiente en el traslape, no se interpreta el
-      blanco como fin del documento. B se ancla por su borde inferior al
-      lienzo Oficio.
+    - A (arriba) es la referencia fija.
+    - B (abajo) se desplaza para registrarse respecto de A.
+    - A pierde 1 pulgada de su extremo inferior.
+    - B pierde 1 pulgada de su extremo superior.
+    - La coincidencia se calcula antes de componer y determina la posición de B.
+    - B queda como capa base, completamente opaca.
+    - A queda encima de B y es la única capa que recibe el alpha blend.
+    - La transición de alpha mide exactamente 1 pulgada.
+    - La salida es un lienzo fijo de 8.5 x 13 pulgadas a 300 DPI.
+    - Si la composición supera los 3900 px, se recorta únicamente en los
+      extremos exteriores para que el resultado final siga cabiendo en Oficio.
     """
     recorte = int(dpi_original)
     if recorte <= 0:
@@ -164,10 +161,13 @@ def _recortar_y_componer(img_a, img_b, dpi_original=300):
         )
 
     if h_a <= recorte or h_b <= recorte:
-        raise ValueError("Las capturas no tienen altura suficiente para eliminar 1 pulgada.")
+        raise ValueError(
+            "Las capturas no tienen altura suficiente para eliminar 1 pulgada."
+        )
 
-    # Capturas originales conservadas. Estas dos vistas son las únicas que se
-    # utilizan para construir el resultado final.
+    # Recortes físicos solicitados:
+    # A: se elimina 1" abajo.
+    # B: se elimina 1" arriba.
     img_a_limpia = img_a[0 : h_a - recorte, :]
     img_b_limpia = img_b[recorte : h_b, :]
 
@@ -177,9 +177,7 @@ def _recortar_y_componer(img_a, img_b, dpi_original=300):
     ancho_objetivo = int(round(8.5 * dpi_original))
     alto_objetivo = int(round(13.0 * dpi_original))
 
-    # El escáner puede entregar unos píxeles menos o más en los bordes
-    # aunque la adquisición corresponda al mismo formato. Se acepta una
-    # diferencia de hasta 10% respecto al ancho Oficio esperado.
+    # Se conserva la tolerancia del 10% para el ancho adquirido.
     tolerancia_ancho = int(round(ancho_objetivo * 0.10))
     diferencia_ancho = abs(w_a - ancho_objetivo)
 
@@ -190,9 +188,7 @@ def _recortar_y_componer(img_a, img_b, dpi_original=300):
             f"y la tolerancia máxima es de {tolerancia_ancho}px (10%)."
         )
 
-    # La adquisición puede ser ligeramente más angosta que el lienzo final.
-    # La imagen se conserva a su resolución original y se centra horizontalmente;
-    # no se escala ni se estira para compensar los píxeles faltantes.
+    # La captura superior queda fija y centrada horizontalmente.
     margen_x = (ancho_objetivo - w_a) // 2
     if margen_x < 0:
         raise ValueError(
@@ -200,125 +196,205 @@ def _recortar_y_componer(img_a, img_b, dpi_original=300):
             f"Oficio de salida ({ancho_objetivo}px)."
         )
 
-    # B se ancla por su borde inferior cuando no existe información suficiente
-    # para calcular la relación entre las dos capturas.
-    inicio_b_en_lienzo = alto_objetivo - alto_b
+    offset_x, offset_y, confianza, inliers = _estimar_desplazamiento_vertical(
+        img_a,
+        img_b,
+    )
 
-    offset_y, confianza, inliers = _estimar_desplazamiento_vertical(img_a, img_b)
-
-    # Caso sin evidencia suficiente: no se intenta inferir la longitud física
-    # observando zonas blancas. Se usa directamente la geometría de anclaje.
-    if offset_y is None:
-        inicio_a = 0
-        fin_a = inicio_b_en_lienzo
-        inicio_b = 0
-        fin_b = alto_b
-
-        print(
-            "SISTEMA: No hay evidencia suficiente para localizar el traslape. "
-            "Se utiliza el anclaje inferior del lienzo sin interpretar el blanco."
-        )
-
-    else:
-        # B limpia comienza en A[offset_y + recorte]. Esta es la frontera
-        # natural de unión porque desde ahí B contiene la continuación del
-        # documento que ya apareció en A.
-        frontera_a = offset_y + recorte
-
-        # Longitud estimada del documento a partir de la relación de las dos
-        # capturas originales.
-        longitud_estimada = offset_y + h_b
-
-        if frontera_a < 0 or frontera_a > alto_a:
-            raise ValueError(
-                "La relación vertical encontrada no es compatible con las "
-                "dimensiones de las capturas."
-            )
-
-        if longitud_estimada <= alto_objetivo:
-            # Documento más corto o exactamente Oficio. Conservamos todo el
-            # documento y, si es más corto, el resto del lienzo queda blanco.
-            inicio_a = 0
-            fin_a = frontera_a
-            inicio_b = 0
-            fin_b = min(alto_b, alto_objetivo - fin_a)
-
-            print(
-                "SISTEMA: Documento estimado dentro de Oficio: "
-                f"{longitud_estimada}px. Se conservará el espacio sobrante."
-            )
-
-        else:
-            # El documento excede el lienzo. Una diferencia pequeña puede ser
-            # causada por el registro entre las dos capturas. Se permite
-            # corregir únicamente una discrepancia limitada y se reparte entre
-            # los dos extremos exteriores, nunca dentro de la zona útil.
-            exceso = longitud_estimada - alto_objetivo
-
-            # El caso real entregado por el usuario tiene 24 px de exceso
-            # geométrico y se reproduce como 12 px por cada extremo. Se fija
-            # un límite pequeño de 50 px para no convertir una diferencia real
-            # de tamaño en un supuesto ajuste de registro.
-            max_exceso_registro = 50
-
-            if exceso > max_exceso_registro:
-                raise ValueError(
-                    "El documento estimado excede el formato Oficio más allá "
-                    f"de la tolerancia de registro permitida ({max_exceso_registro}px): "
-                    f"exceso={exceso}px."
-                )
-
-            ajuste = int(round(exceso / 2.0))
-
-            inicio_a = ajuste
-            fin_a = frontera_a
-            inicio_b = 0
-            fin_b = alto_b - ajuste
-
-            print(
-                "SISTEMA: Documento ligeramente mayor por discrepancia de registro: "
-                f"exceso={exceso}px. Se corrigen {ajuste}px en cada extremo."
-            )
-
-        print(
-            "SISTEMA: Relación encontrada entre capturas: "
-            f"offset_y={offset_y}, confianza={confianza:.3f}, inliers={inliers}."
-        )
-        print(
-            "SISTEMA: Composición calculada: "
-            f"A[{inicio_a}:{fin_a}] + B[{inicio_b}:{fin_b}]."
-        )
-
-    bloque_a = img_a_limpia[inicio_a:fin_a, :]
-    bloque_b = img_b_limpia[inicio_b:fin_b, :]
-
-    if bloque_a.size == 0 or bloque_b.size == 0:
-        raise ValueError("La geometría calculada produjo un bloque vacío.")
-
-    alto_compuesto = bloque_a.shape[0] + bloque_b.shape[0]
-    if alto_compuesto > alto_objetivo:
+    if offset_x is None or offset_y is None:
         raise ValueError(
-            f"La composición excede el lienzo Oficio: {alto_compuesto}px."
+            "No fue posible registrar las dos capturas: "
+            "no se encontraron suficientes coincidencias confiables."
         )
 
-    # Lienzo físico fijo. Si el documento es más corto, la región no utilizada
-    # permanece blanca. Esto es deliberado y evita escalar el documento.
-    oficio_mat = np.full(
-        (alto_objetivo, ancho_objetivo, img_a.shape[2]),
+    # B se coloca respecto de A. La coordenada de B[0] cambia porque primero
+    # se eliminó 1" de la parte superior de B.
+    x_b = margen_x + offset_x
+    y_b = offset_y + recorte
+
+    if y_b < 0 or y_b >= alto_a:
+        raise ValueError(
+            "El registro vertical encontrado no deja una zona común válida "
+            "entre las capturas."
+        )
+
+    # Necesitamos al menos 1" de coincidencia física para realizar exactamente
+    # el alpha blend solicitado.
+    traslape_disponible = min(alto_a - y_b, alto_b)
+    ancho_blend = recorte
+
+    if traslape_disponible < ancho_blend:
+        raise ValueError(
+            "El registro encontrado no proporciona una zona común suficiente "
+            "para aplicar la transición de alpha de 1 pulgada."
+        )
+
+    # La imagen superior permanece fija. La inferior se desplaza hasta este
+    # punto y queda como base opaca.
+    alto_documento = max(alto_a, y_b + alto_b)
+
+    # Se construye primero el documento completo, aunque mida más de Oficio.
+    # Después se recortan exclusivamente los extremos exteriores.
+    compuesto = np.full(
+        (alto_documento, ancho_objetivo, img_a.shape[2]),
         255,
         dtype=img_a.dtype,
     )
 
-    oficio_mat[
-        0 : bloque_a.shape[0],
-        margen_x : margen_x + w_a,
-    ] = bloque_a
-    oficio_mat[
-        bloque_a.shape[0] : bloque_a.shape[0] + bloque_b.shape[0],
-        margen_x : margen_x + w_b,
-    ] = bloque_b
+    # Colocar B como capa base. Si el registro horizontal la desplaza unos
+    # píxeles, se recorta únicamente lo que quede fuera del lienzo.
+    bx0 = max(0, x_b)
+    bx1 = min(ancho_objetivo, x_b + w_b)
+
+    if bx0 >= bx1:
+        raise ValueError(
+            "El registro horizontal dejó la captura inferior fuera del lienzo."
+        )
+
+    src_b_x0 = bx0 - x_b
+    src_b_x1 = src_b_x0 + (bx1 - bx0)
+
+    compuesto[
+        y_b : y_b + alto_b,
+        bx0:bx1,
+    ] = img_b_limpia[:, src_b_x0:src_b_x1]
+
+    # Parte superior de A: completamente opaca y fija.
+    ax0 = max(0, margen_x)
+    ax1 = min(ancho_objetivo, margen_x + w_a)
+
+    if ax0 >= ax1:
+        raise ValueError(
+            "La captura superior quedó fuera del lienzo Oficio."
+        )
+
+    src_a_x0 = ax0 - margen_x
+    src_a_x1 = src_a_x0 + (ax1 - ax0)
+
+    if y_b > 0:
+        compuesto[
+            0:y_b,
+            ax0:ax1,
+        ] = img_a_limpia[0:y_b, src_a_x0:src_a_x1]
+
+    # Zona de unión: B permanece debajo al 100%; A está encima y pierde
+    # progresivamente opacidad durante exactamente 1".
+    #
+    # En el comienzo de la zona de unión:
+    #     alpha_A = 1.0
+    # Al final de la zona de unión:
+    #     alpha_A = 0.0
+    #
+    # Así la información común se ve una sola vez de manera continua y no se
+    # concatena una captura después de la otra.
+    y_union = y_b
+    y_union_fin = y_b + ancho_blend
+
+    if y_union_fin > alto_a or y_union_fin > y_b + alto_b:
+        raise ValueError(
+            "La zona disponible para el traslape no permite una transición "
+            "de alpha completa de 1 pulgada."
+        )
+
+    overlap_x0 = max(ax0, bx0)
+    overlap_x1 = min(ax1, bx1)
+
+    if overlap_x0 >= overlap_x1:
+        raise ValueError(
+            "No existe traslape horizontal suficiente entre las capturas registradas."
+        )
+
+    top_x0 = overlap_x0 - margen_x
+    top_x1 = top_x0 + (overlap_x1 - overlap_x0)
+
+    bottom_x0 = overlap_x0 - x_b
+    bottom_x1 = bottom_x0 + (overlap_x1 - overlap_x0)
+
+    for i in range(ancho_blend):
+        y = y_union + i
+
+        alpha_superior = 1.0 - (float(i) / float(ancho_blend - 1))
+        alpha_inferior = 1.0 - alpha_superior
+
+        fila_superior = img_a_limpia[y, top_x0:top_x1].astype(np.float32)
+        fila_inferior = img_b_limpia[i, bottom_x0:bottom_x1].astype(np.float32)
+
+        mezcla = (
+            fila_superior * alpha_superior
+            + fila_inferior * alpha_inferior
+        )
+
+        compuesto[
+            y,
+            overlap_x0:overlap_x1,
+        ] = np.clip(mezcla, 0, 255).astype(np.uint8)
+
+    # Después de la franja de 1", la imagen inferior queda sola y completamente
+    # opaca. No se extiende el degradado más allá de la pulgada solicitada.
+    if y_union_fin < alto_a:
+        compuesto[
+            y_union_fin:alto_a,
+            ax0:ax1,
+        ] = img_a_limpia[y_union_fin:alto_a, src_a_x0:src_a_x1]
+
+    print(
+        "SISTEMA: Registro de capturas: "
+        f"offset_x={offset_x}, offset_y={offset_y}, "
+        f"confianza={confianza:.3f}, inliers={inliers}."
+    )
+    print(
+        "SISTEMA: Traslape registrado: "
+        f"x={overlap_x0}:{overlap_x1}, "
+        f"y={y_union}:{y_union_fin}, "
+        f"alpha={ancho_blend}px (1 pulgada)."
+    )
+    print(
+        "SISTEMA: Composición antes de ajuste Oficio: "
+        f"{ancho_objetivo} x {alto_documento}px."
+    )
+
+    # Ajuste vertical final al lienzo Oficio. Nunca se toca la zona de unión
+    # para corregir el exceso: únicamente se recortan los extremos exteriores.
+    if alto_documento > alto_objetivo:
+        exceso = alto_documento - alto_objetivo
+        recorte_superior = exceso // 2
+        recorte_inferior = exceso - recorte_superior
+
+        compuesto = compuesto[
+            recorte_superior : alto_documento - recorte_inferior,
+            :,
+        ]
+
+        print(
+            "SISTEMA: Documento mayor que Oficio: "
+            f"exceso={exceso}px. "
+            f"Recorte exterior arriba={recorte_superior}px, "
+            f"abajo={recorte_inferior}px."
+        )
+
+    # Si el documento es menor, se conserva sin escalar y el sobrante queda
+    # blanco en el extremo inferior.
+    if compuesto.shape[0] < alto_objetivo:
+        oficio_mat = np.full(
+            (alto_objetivo, ancho_objetivo, img_a.shape[2]),
+            255,
+            dtype=img_a.dtype,
+        )
+        oficio_mat[
+            0 : compuesto.shape[0],
+            :,
+        ] = compuesto
+    else:
+        oficio_mat = compuesto
+
+    if oficio_mat.shape[:2] != (alto_objetivo, ancho_objetivo):
+        raise ValueError(
+            "No fue posible ajustar la composición al lienzo Oficio de salida: "
+            f"{oficio_mat.shape[1]} x {oficio_mat.shape[0]}px."
+        )
 
     return oficio_mat
+
 
 def procesar_union_y_preview(ruta_arriba, ruta_abajo, dpi_original=300):
     if not os.path.exists(ruta_arriba):
