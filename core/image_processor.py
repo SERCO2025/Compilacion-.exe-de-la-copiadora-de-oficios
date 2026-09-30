@@ -329,14 +329,6 @@ def _recortar_y_componer(img_a, img_b, dpi_original=300):
             overlap_x0:overlap_x1,
         ] = np.clip(mezcla, 0, 255).astype(np.uint8)
 
-    # Después de la franja de 1", la imagen inferior queda sola y completamente
-    # opaca. No se extiende el degradado más allá de la pulgada solicitada.
-    if y_union_fin < alto_a:
-        compuesto[
-            y_union_fin:alto_a,
-            ax0:ax1,
-        ] = img_a_limpia[y_union_fin:alto_a, src_a_x0:src_a_x1]
-
     print(
         "SISTEMA: Registro de capturas: "
         f"offset_x={offset_x}, offset_y={offset_y}, "
