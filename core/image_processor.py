@@ -361,7 +361,7 @@ def procesar_union_y_preview(ruta_arriba, ruta_abajo, dpi_original=300):
 
     except Exception as e:
         print(f"Error: {e}")
-        return False
+        raise
 
 
 def aplicar_mejoras_impresion(ruta_origen, modo, mejoramiento=False):
