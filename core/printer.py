@@ -48,7 +48,7 @@ class PrinterManager:
                 devmode.Fields |= 0x00000001   # DM_ORIENTATION
             except Exception:
                 pass
-            return devmode, info.get("pPrintProcessor")
+            return devmode, info.get("pDriverName")
         finally:
             win32print.ClosePrinter(handle)
 
