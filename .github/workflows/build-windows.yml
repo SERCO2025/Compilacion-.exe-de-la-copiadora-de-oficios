@@ -169,14 +169,9 @@ jobs:
         run: |
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "## Copiadora de Oficios - Windows"
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "Compilación: **${{ github.run_number }}**"
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "Cerco MXL, arroba Gmail.com"
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "Busca el archivo en Backblaze:"
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "[Enlace directo a Backblaze B2](https://secure.backblaze.com/b2_buckets.htm)"
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "La contraseña no se publica en el resumen de GitHub Actions."
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "Busca el archivo en Backblaze"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "https://secure.backblaze.com/b2_buckets.htm"
+
       - name: Eliminar compilación anterior al límite de 10
         if: ${{ github.run_number > 10 }}
         uses: backblaze-labs/b2-action@v1
