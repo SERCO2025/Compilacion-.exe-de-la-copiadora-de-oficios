@@ -31,6 +31,21 @@ class ConfigWindow:
             font=("Impact", 20)
         ).pack(pady=15)
 
+        # La detección de dispositivos no debe impedir que se construya
+        # la ventana. Si un backend falla, la lista queda vacía y el resto
+        # de la configuración continúa funcionando.
+        try:
+            scanner_list = self.scanner_manager.list_scanners()
+        except Exception as e:
+            scanner_list = []
+            print("Aviso: no fue posible enumerar los scanners: {}".format(e))
+
+        try:
+            printer_list = self.printer_manager.listar_impresoras()
+        except Exception as e:
+            printer_list = []
+            print("Aviso: no fue posible enumerar las impresoras: {}".format(e))
+
         # --- SELECCIÓN SCANNER 1 (COPIA DIRECTA) ---
         tk.Label(
             self.top,
@@ -42,7 +57,7 @@ class ConfigWindow:
 
         self.cb_scan1 = ttk.Combobox(
             self.top,
-            values=self.scanner_manager.list_scanners(),
+            values=scanner_list,
             state="readonly",
             width=40
         )
@@ -69,7 +84,7 @@ class ConfigWindow:
 
         self.cb_scan2 = ttk.Combobox(
             self.top,
-            values=self.scanner_manager.list_scanners(),
+            values=scanner_list,
             width=40
         )
 
@@ -95,7 +110,7 @@ class ConfigWindow:
 
         self.cb_print = ttk.Combobox(
             self.top,
-            values=self.printer_manager.listar_impresoras(),
+            values=printer_list,
             width=40
         )
 
