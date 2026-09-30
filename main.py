@@ -1582,8 +1582,16 @@ class CopiadoraDeOficios:
 
                 else:
 
+                    detalle = getattr(
+                        self.printer,
+                        "last_error",
+                        ""
+                    )
+
                     self.mostrar_estado(
-                        "Error de impresión",
+                        "Error de impresión: {}".format(
+                            detalle or "el controlador no devolvió detalles"
+                        ),
                         "#FF3333"
                     )
 
