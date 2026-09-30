@@ -177,10 +177,27 @@ def _recortar_y_componer(img_a, img_b, dpi_original=300):
     ancho_objetivo = int(round(8.5 * dpi_original))
     alto_objetivo = int(round(13.0 * dpi_original))
 
-    if w_a != ancho_objetivo:
+    # El escáner puede entregar unos píxeles menos o más en los bordes
+    # aunque la adquisición corresponda al mismo formato. Se acepta una
+    # diferencia de hasta 10% respecto al ancho Oficio esperado.
+    tolerancia_ancho = int(round(ancho_objetivo * 0.10))
+    diferencia_ancho = abs(w_a - ancho_objetivo)
+
+    if diferencia_ancho > tolerancia_ancho:
         raise ValueError(
-            f"El ancho de las capturas no corresponde a Oficio a {dpi_original} DPI: "
-            f"se esperaba {ancho_objetivo}px y se obtuvo {w_a}px."
+            f"El ancho de las capturas está fuera de la tolerancia permitida: "
+            f"se esperaba aproximadamente {ancho_objetivo}px, se obtuvo {w_a}px "
+            f"y la tolerancia máxima es de {tolerancia_ancho}px (10%)."
+        )
+
+    # La adquisición puede ser ligeramente más angosta que el lienzo final.
+    # La imagen se conserva a su resolución original y se centra horizontalmente;
+    # no se escala ni se estira para compensar los píxeles faltantes.
+    margen_x = (ancho_objetivo - w_a) // 2
+    if margen_x < 0:
+        raise ValueError(
+            f"El ancho adquirido ({w_a}px) no puede ser mayor que el lienzo "
+            f"Oficio de salida ({ancho_objetivo}px)."
         )
 
     # B se ancla por su borde inferior cuando no existe información suficiente
@@ -292,10 +309,13 @@ def _recortar_y_componer(img_a, img_b, dpi_original=300):
         dtype=img_a.dtype,
     )
 
-    oficio_mat[0 : bloque_a.shape[0], 0:w_a] = bloque_a
+    oficio_mat[
+        0 : bloque_a.shape[0],
+        margen_x : margen_x + w_a,
+    ] = bloque_a
     oficio_mat[
         bloque_a.shape[0] : bloque_a.shape[0] + bloque_b.shape[0],
-        0:w_b,
+        margen_x : margen_x + w_b,
     ] = bloque_b
 
     return oficio_mat
