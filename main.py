@@ -71,6 +71,8 @@ class IndicadorEstado:
     def __init__(self, parent):
         self.parent = parent
         self.var = tk.StringVar(value="Listo")
+        self._scroll_job = None
+        self._scroll_position = 0
 
         self.entry = tk.Entry(
             parent,
@@ -114,12 +116,41 @@ class IndicadorEstado:
         )
 
     def mostrar(self, mensaje, color="#00FF00"):
+        if self._scroll_job is not None:
+            try:
+                self.entry.after_cancel(self._scroll_job)
+            except Exception:
+                pass
+            self._scroll_job = None
+
         self.var.set(str(mensaje))
         self.entry.configure(fg=color)
-
         self.entry.xview_moveto(0.0)
+        self._scroll_position = 0
 
         self.parent.update_idletasks()
+
+        # Si el mensaje es largo, comienza automáticamente desde el principio,
+        # hace una pausa y después lo desplaza horizontalmente para mostrarlo
+        # completo. Al llegar al final, vuelve a comenzar.
+        if len(str(mensaje)) > 42:
+            self._scroll_job = self.entry.after(
+                900,
+                self._auto_scroll
+            )
+
+    def _auto_scroll(self):
+        texto = self.var.get()
+
+        if len(texto) <= 42:
+            self._scroll_job = None
+            return
+
+        self.entry.xview_scroll(1, "units")
+        self._scroll_job = self.entry.after(
+            90,
+            self._auto_scroll
+        )
 
     def desplazar_horizontal(self, event):
         if event.delta:
