@@ -19,17 +19,32 @@ jobs:
       - name: Descargar código del proyecto
         uses: actions/checkout@v4
 
+      - name: Restaurar caché de herramientas
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache\python-3.7.9-x86.exe
+            .cache\twain-dsm-020501.zip
+          key: windows-2022-python-3.7.9-x86-twain-2.5.1-v1
+
       - name: Descargar Python 3.7.9 x86
         shell: powershell
         run: |
+          $cacheDir = "$env:GITHUB_WORKSPACE\.cache"
+          New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null
           $pythonUrl = "https://www.python.org/ftp/python/3.7.9/python-3.7.9.exe"
-          $pythonInstaller = "$env:RUNNER_TEMP\python-3.7.9-x86.exe"
-          Invoke-WebRequest -Uri $pythonUrl -OutFile $pythonInstaller
+          $pythonInstaller = "$cacheDir\python-3.7.9-x86.exe"
+          if (!(Test-Path $pythonInstaller)) {
+            Write-Host "Python 3.7.9 x86 no está en caché. Descargando..."
+            Invoke-WebRequest -Uri $pythonUrl -OutFile $pythonInstaller
+          } else {
+            Write-Host "Python 3.7.9 x86 recuperado de caché."
+          }
 
       - name: Instalar Python 3.7.9 x86
         shell: powershell
         run: |
-          $pythonInstaller = "$env:RUNNER_TEMP\python-3.7.9-x86.exe"
+          $pythonInstaller = "$env:GITHUB_WORKSPACE\.cache\python-3.7.9-x86.exe"
           Start-Process -FilePath $pythonInstaller -ArgumentList "/quiet InstallAllUsers=0 PrependPath=0 Include_pip=1 Include_test=0" -Wait -NoNewWindow
 
       - name: Localizar Python 3.7.9 x86
@@ -41,18 +56,28 @@ jobs:
           if not exist "%PYTHON_EXE%" exit 1
           "%PYTHON_EXE%" -c "import sys, struct; print('Python:', sys.version); print('Arquitectura:', struct.calcsize('P') * 8, 'bits'); assert sys.version_info[:3] == (3,7,9); assert struct.calcsize('P') * 8 == 32"
 
+      - name: Restaurar caché de pip
+        uses: actions/cache@v4
+        with:
+          path: .cache\pip
+          key: windows-2022-python-3.7.9-x86-pip-23.2.1-setuptools-67.8.0-wheel-0.41.0-numpy-1.21.6-opencv-4.5.5.64-pillow-9.5.0-pywin32-306-pytwain-2.2.2-pyinstaller-5.13.2-v1
+
       - name: Preparar pip
         shell: cmd
         run: |
           set PYTHON_EXE=%LOCALAPPDATA%\Programs\Python\Python37-32\python.exe
+          set PIP_CACHE_DIR=%GITHUB_WORKSPACE%\.cache\pip
+          if not exist "%PIP_CACHE_DIR%" mkdir "%PIP_CACHE_DIR%"
           "%PYTHON_EXE%" -m ensurepip --upgrade
-          "%PYTHON_EXE%" -m pip install --upgrade pip==23.2.1 setuptools==67.8.0 wheel==0.41.0
+          "%PYTHON_EXE%" -m pip install --upgrade --cache-dir "%PIP_CACHE_DIR%" pip==23.2.1 setuptools==67.8.0 wheel==0.41.0
 
       - name: Instalar dependencias
         shell: cmd
         run: |
           set PYTHON_EXE=%LOCALAPPDATA%\Programs\Python\Python37-32\python.exe
-          "%PYTHON_EXE%" -m pip install numpy==1.21.6 opencv-python==4.5.5.64 Pillow==9.5.0 pywin32==306 pytwain==2.2.2 pyinstaller==5.13.2
+          set PIP_CACHE_DIR=%GITHUB_WORKSPACE%\.cache\pip
+          if not exist "%PIP_CACHE_DIR%" mkdir "%PIP_CACHE_DIR%"
+          "%PYTHON_EXE%" -m pip install --cache-dir "%PIP_CACHE_DIR%" numpy==1.21.6 opencv-python==4.5.5.64 Pillow==9.5.0 pywin32==306 pytwain==2.2.2 pyinstaller==5.13.2
 
       - name: Adaptar pytwain para Python 3.7
         shell: powershell
@@ -71,10 +96,19 @@ jobs:
       - name: Descargar TWAIN DSM 32 bits
         shell: powershell
         run: |
+          $cacheDir = "$env:GITHUB_WORKSPACE\.cache"
+          New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null
           $url = "https://github.com/twain/twain-dsm/releases/download/v2.5.1/dsm_020501.zip"
-          $zip = "$env:RUNNER_TEMP\twain-dsm.zip"
+          $zip = "$cacheDir\twain-dsm-020501.zip"
           $extract = "$env:RUNNER_TEMP\twain-dsm"
-          Invoke-WebRequest -Uri $url -OutFile $zip
+
+          if (!(Test-Path $zip)) {
+            Write-Host "TWAIN DSM no está en caché. Descargando..."
+            Invoke-WebRequest -Uri $url -OutFile $zip
+          } else {
+            Write-Host "TWAIN DSM recuperado de caché."
+          }
+
           if (Test-Path $extract) { Remove-Item -Recurse -Force $extract }
           Expand-Archive -Path $zip -DestinationPath $extract -Force
 
@@ -90,6 +124,7 @@ jobs:
 
           Copy-Item $dll.FullName "TWAINDSM.dll" -Force
           Write-Host "TWAIN DSM seleccionado: $($dll.FullName)"
+
       - name: Verificar dependencias
         shell: cmd
         run: |
