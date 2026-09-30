@@ -301,14 +301,18 @@ def _recortar_y_componer(img_a, img_b, dpi_original=300):
     return oficio_mat
 
 def procesar_union_y_preview(ruta_arriba, ruta_abajo, dpi_original=300):
-    if not os.path.exists(ruta_arriba) or not os.path.exists(ruta_abajo):
-        return False
+    if not os.path.exists(ruta_arriba):
+        raise FileNotFoundError("No existe el escaneo de arriba: {}".format(ruta_arriba))
+    if not os.path.exists(ruta_abajo):
+        raise FileNotFoundError("No existe el escaneo de abajo: {}".format(ruta_abajo))
 
     img_a = cv2.imread(ruta_arriba, cv2.IMREAD_COLOR)
     img_b = cv2.imread(ruta_abajo, cv2.IMREAD_COLOR)
 
-    if img_a is None or img_b is None:
-        return False
+    if img_a is None:
+        raise ValueError("OpenCV no pudo abrir el escaneo de arriba: {}".format(ruta_arriba))
+    if img_b is None:
+        raise ValueError("OpenCV no pudo abrir el escaneo de abajo: {}".format(ruta_abajo))
 
     try:
         # Las imágenes originales se mantienen en color. La conversión a gris
