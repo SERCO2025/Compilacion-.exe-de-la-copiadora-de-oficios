@@ -1,5 +1,6 @@
 import os
 import win32ui
+import win32gui
 import win32con
 from PIL import Image, ImageWin
 
@@ -47,7 +48,7 @@ class PrinterManager:
                 devmode.Fields |= 0x00000001   # DM_ORIENTATION
             except Exception:
                 pass
-            return devmode, info.get("pDriverName")
+            return devmode, info.get("pPrintProcessor")
         finally:
             win32print.ClosePrinter(handle)
 
@@ -59,15 +60,27 @@ class PrinterManager:
                 "no se puede garantizar la configuracion Oficio."
             )
 
-        dc = win32ui.CreateDC()
+        hdc = None
+        dc = None
         try:
-            dc.CreateDC(driver, self.printer_name, None, devmode)
+            hdc = win32gui.CreateDC(
+                driver,
+                self.printer_name,
+                devmode
+            )
+            dc = win32ui.CreateDCFromHandle(hdc)
             return dc, True
         except Exception as e:
-            try:
-                dc.DeleteDC()
-            except Exception:
-                pass
+            if dc is not None:
+                try:
+                    dc.DeleteDC()
+                except Exception:
+                    pass
+            elif hdc is not None:
+                try:
+                    win32gui.DeleteDC(hdc)
+                except Exception:
+                    pass
             raise RuntimeError(
                 "No fue posible crear el contexto de impresion con papel Oficio: {}".format(e)
             ) from e
