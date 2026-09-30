@@ -9,9 +9,11 @@ import pythoncom
 
 try:
     import twain
+    from twain.exceptions import CancelAll
     TWAIN_AVAILABLE = True
 except ImportError:
     twain = None
+    CancelAll = None
     TWAIN_AVAILABLE = False
 
 try:
@@ -311,7 +313,7 @@ class ScannerManager:
                         transfer_result.append(True)
 
                         if remaining_count:
-                            raise twain.CancelAll()
+                            raise CancelAll()
 
                     source.acquire_natively(
                         after=on_image,
