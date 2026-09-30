@@ -1130,16 +1130,24 @@ class CopiadoraDeOficios:
         self,
         detalle
     ):
-        """Devuelve el texto apropiado para un error de escáner."""
+        """Devuelve un mensaje útil conservando el error real del escáner."""
 
         detalle = str(
             detalle or ""
-        )
+        ).strip()
 
-        if "desconectado" in detalle.lower():
-            return "Scanner desconectado"
+        if not detalle:
+            return "Fallo de escaneo: el controlador no devolvió detalles"
 
-        return "Fallo de escaneo"
+        detalle_lower = detalle.lower()
+
+        if "desconectado" in detalle_lower:
+            return "Scanner desconectado: {}".format(detalle)
+
+        if "ocupado" in detalle_lower:
+            return "Scanner ocupado: {}".format(detalle)
+
+        return "Fallo de escaneo: {}".format(detalle)
 
     # ========================================================
     # MOVIMIENTO DE VENTANA
