@@ -69,7 +69,7 @@ class PrinterManager:
             except Exception:
                 pass
             raise RuntimeError(
-                "No fue posible crear el contexto de impresion con papel Oficio."
+                "No fue posible crear el contexto de impresion con papel Oficio: {}".format(e)
             ) from e
 
     def imprimir_archivo(self, ruta_imagen):
