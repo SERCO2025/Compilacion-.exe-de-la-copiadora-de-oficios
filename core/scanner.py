@@ -237,7 +237,7 @@ class ScannerManager:
             pythoncom.CoUninitialize()
 
     def _scan_twain(self, source_name, output_path, dpi=300):
-        """Adquiere una sola imagen TWAIN sin usar callbacks ni CancelAll."""
+        """Adquiere una sola imagen TWAIN y convierte el DIB nativo a BMP."""
         if not TWAIN_AVAILABLE:
             return False, "TWAIN no está disponible en este equipo"
 
@@ -276,12 +276,15 @@ class ScannerManager:
                         modal_ui=False,
                     )
 
-                    image, remaining_count = source.xfer_image_natively()
+                    handle, remaining_count = source.xfer_image_natively()
 
-                    if image is None:
+                    if not handle:
                         return False, "TWAIN no devolvió una imagen"
 
-                    image.save(temp_bmp)
+                    twain.dib_to_bm_file(
+                        handle,
+                        temp_bmp
+                    )
 
                     if not os.path.exists(temp_bmp):
                         return False, "TWAIN no generó el archivo de imagen"
