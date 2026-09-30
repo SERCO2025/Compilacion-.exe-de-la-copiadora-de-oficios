@@ -42,24 +42,59 @@ class ScannerManager:
         }
 
     def _twain_dsm_path(self):
-        """Obtiene el DSM TWAIN 1.x de Windows para aplicaciones de 32 bits."""
+        """Busca primero el DSM TWAIN incluido con el EXE y luego los del sistema."""
+        candidates = []
+
+        # PyInstaller --onefile extrae los binarios incluidos en _MEIPASS.
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            candidates.append(os.path.join(meipass, "TWAINDSM.dll"))
+
+        # Permite trabajar también desde el código fuente.
+        module_dir = os.path.dirname(os.path.abspath(__file__))
+        candidates.append(
+            os.path.abspath(os.path.join(module_dir, os.pardir, "TWAINDSM.dll"))
+        )
+
+        # Si el EXE está acompañado por el DLL, también lo encontramos aquí.
+        exe_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+        candidates.append(os.path.join(exe_dir, "TWAINDSM.dll"))
+
         windir = os.environ.get("WINDIR", r"C:\Windows")
-        return os.path.join(windir, "twain_32.dll")
+        candidates.append(os.path.join(windir, "TWAINDSM.dll"))
+        candidates.append(os.path.join(windir, "twain_32.dll"))
+
+        for path in candidates:
+            if os.path.isfile(path):
+                return path
+
+        # Conserva un mensaje útil si ningún DSM está instalado.
+        return candidates[0] if candidates else os.path.join(windir, "twain_32.dll")
 
     def _create_twain_source_manager(self):
-        """Crea pytwain usando el DSM TWAIN 32-bit nativo de Windows."""
+        """Crea pytwain usando el DSM TWAIN disponible para la aplicación."""
         if not TWAIN_AVAILABLE:
             return None
 
         dsm_path = self._twain_dsm_path()
-        if not os.path.exists(dsm_path):
+        if not os.path.isfile(dsm_path):
             raise RuntimeError(
-                "No se encontró el DSM TWAIN de Windows en: {}".format(dsm_path)
+                "No se encontró el DSM TWAIN. Rutas revisadas: {}".format(dsm_path)
             )
 
-        # Los drivers TWAIN instalados en C:\Windows\twain_32
-        # normalmente trabajan con TWAIN 1.x.
         return twain.SourceManager(0, ProtocolMajor=1, dsm_name=dsm_path)
+
+    def _wia_property(self, info, property_names):
+        """Obtiene una propiedad WIA probando nombres compatibles."""
+        for property_name in property_names:
+            try:
+                value = info.Properties(property_name).Value
+                value = str(value).strip()
+                if value:
+                    return value
+            except Exception:
+                pass
+        return ""
 
     def _list_wia_scanners(self):
         """Enumera los escáneres disponibles mediante WIA."""
@@ -79,19 +114,31 @@ class ScannerManager:
                     if int(info.Type) != 1:
                         continue
 
-                    name = str(info.Properties("Name").Value)
+                    # Algunos controladores exponen Name y otros FriendlyName.
+                    name = self._wia_property(
+                        info,
+                        ("Name", "FriendlyName")
+                    )
                     if not name:
                         continue
 
-                    dev_names.append((name, str(info.DeviceID)))
-                except Exception:
+                    try:
+                        device_id = str(info.DeviceID)
+                    except Exception:
+                        device_id = ""
+
+                    dev_names.append((name, device_id))
+                except Exception as e:
                     # Un dispositivo defectuoso no debe impedir detectar los demás.
+                    print("Aviso WIA: no se pudo leer el dispositivo {}: {}".format(
+                        index,
+                        e
+                    ))
                     continue
 
-        except Exception:
-            # WIA puede estar disponible como COM pero devolver cero dispositivos
-            # o producir un error al enumerar. TWAIN seguirá intentándose por separado.
-            pass
+        except Exception as e:
+            # TWAIN seguirá intentándose por separado.
+            print("Error WIA al enumerar scanners: {}".format(e))
         finally:
             pythoncom.CoUninitialize()
 
@@ -127,11 +174,9 @@ class ScannerManager:
         # WIA
         # ---------------------------------------------------------------
         wia_scanners = self._list_wia_scanners()
-        wia_names = set()
 
         for name, device_id in wia_scanners:
             display_name = name
-            wia_names.add(name)
             self._register_scanner(display_name, "WIA", device_id)
             result.append(display_name)
 
@@ -150,8 +195,6 @@ class ScannerManager:
             result.append(display_name)
 
         if not result:
-            if TWAIN_AVAILABLE:
-                return ["No se detectaron Scanners"]
             return ["No se detectaron Scanners"]
 
         return result
@@ -174,7 +217,10 @@ class ScannerManager:
                         continue
 
                     device_id = str(info.DeviceID)
-                    name = str(info.Properties("Name").Value)
+                    name = self._wia_property(
+                        info,
+                        ("Name", "FriendlyName")
+                    )
 
                     if device_id == scanner_identifier or name == scanner_identifier:
                         target_device = info.Connect()
@@ -244,12 +290,6 @@ class ScannerManager:
                     return False, "Fuente TWAIN no encontrada"
 
                 try:
-                    # IMPORTANTE:
-                    # request_acquire() solamente habilita la fuente.
-                    # Después debe ejecutarse el modal/message loop de TWAIN
-                    # para recibir MSG_XFERREADY. Hacer xfer_image_natively()
-                    # inmediatamente provoca que algunos drivers Epson no
-                    # lleguen nunca al estado de transferencia.
                     try:
                         source.set_capability(
                             twain.ICAP_XRESOLUTION,
@@ -262,9 +302,6 @@ class ScannerManager:
                             dpi,
                         )
                     except Exception:
-                        # Algunos drivers no permiten modificar la resolución
-                        # antes de habilitarse. Se conserva la resolución del
-                        # driver en ese caso.
                         pass
 
                     transfer_result = []
@@ -273,8 +310,6 @@ class ScannerManager:
                         image.save(temp_bmp)
                         transfer_result.append(True)
 
-                        # Solo necesitamos una hoja. Si el alimentador/source
-                        # anuncia más imágenes, cancelamos las restantes.
                         if remaining_count:
                             raise twain.CancelAll()
 
@@ -332,7 +367,6 @@ class ScannerManager:
         if not scanner_name:
             return False, "Nombre de scanner vacío"
 
-        # Si la lista todavía no fue cargada, intentamos reconstruirla.
         scanner_info = self._scanner_registry.get(scanner_name)
         if scanner_info is None:
             self.list_scanners()
@@ -345,10 +379,6 @@ class ScannerManager:
         identifier = scanner_info["identifier"]
 
         if protocol == "WIA":
-            # Algunos Epson aparecen primero como WIA aunque el controlador
-            # que realmente permite adquirir la imagen sea TWAIN.
-            # Si WIA falla, probamos automáticamente la fuente TWAIN con
-            # el mismo nombre antes de informar un fallo de escaneo.
             wia_ok, wia_msg = self._scan_wia(identifier, output_path, dpi)
             if wia_ok:
                 return True, wia_msg
