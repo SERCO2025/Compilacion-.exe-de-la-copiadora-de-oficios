@@ -14,6 +14,7 @@ class PrinterManager:
 
     def __init__(self, printer_name=None):
         self.printer_name = printer_name
+        self.last_error = ""
 
     @staticmethod
     def listar_impresoras():
@@ -77,11 +78,15 @@ class PrinterManager:
         a 300 DPI. No aplica 'fit to page'. Si parte de la imagen queda
         fuera del area imprimible, esa parte se pierde.
         """
+        self.last_error = ""
+
         if not self.printer_name:
-            print("ERROR: No hay impresora configurada.")
+            self.last_error = "No hay impresora configurada."
+            print("ERROR: {}".format(self.last_error))
             return False
         if not os.path.isfile(ruta_imagen):
-            print(f"ERROR: No existe el archivo: {ruta_imagen}")
+            self.last_error = "No existe el archivo: {}".format(ruta_imagen)
+            print("ERROR: {}".format(self.last_error))
             return False
         try:
             image = Image.open(ruta_imagen)
@@ -156,5 +161,6 @@ class PrinterManager:
                 try: hDC.DeleteDC()
                 except Exception: pass
         except Exception as e:
-            print(f"ERROR DE IMPRESION: {e}")
+            self.last_error = str(e)
+            print("ERROR DE IMPRESION: {}".format(self.last_error))
             return False
